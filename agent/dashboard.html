@@ -1,0 +1,1356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>InstaPrint | Shopkeeper Control Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <!-- PDF.js library for high-fidelity client-side PDF rendering in dashboard -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+  <script>
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+  </script>
+
+  <style>
+    :root {
+      --bg-primary: #f8fafc;
+      --text-main: #0f172a;
+      --text-muted: #64748b;
+      --primary-color: #3d5e35; /* Olive Green */
+      --primary-hover: #2d4627;
+      --border-color: #e2e8f0;
+      --card-bg: #ffffff;
+      --success-color: #16a34a;
+      --warning-color: #d97706;
+      --danger-color: #dc2626;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg-primary);
+      color: var(--text-main);
+      font-family: 'Outfit', sans-serif;
+      padding: 24px 16px;
+      min-height: 100vh;
+    }
+
+    .dashboard-container {
+      max-width: 1000px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      transition: max-width 0.35s ease;
+    }
+
+    /* Layout Panel Modes */
+    .dashboard-layout {
+      display: flex;
+      gap: 20px;
+      width: 100%;
+      align-items: flex-start;
+    }
+
+    .main-content-pane {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      transition: width 0.35s ease;
+    }
+
+    .preview-pane {
+      width: 360px;
+      display: none;
+      flex-direction: column;
+      gap: 20px;
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 20px;
+      position: sticky;
+      top: 24px;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+      animation: slideIn 0.3s ease-out forwards;
+    }
+
+    @keyframes slideIn {
+      from { transform: translateX(20px); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+
+    /* Active Preview View Mode */
+    .preview-active .preview-pane {
+      display: flex;
+    }
+
+    .preview-active.dashboard-container {
+      max-width: 1350px !important;
+    }
+
+    /* Header */
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 12px;
+      border-bottom: 2px solid var(--border-color);
+    }
+
+    .brand h1 {
+      font-size: 1.6rem;
+      font-weight: 800;
+      color: var(--text-main);
+    }
+
+    .brand h1 span {
+      color: var(--primary-color);
+    }
+
+    .brand p {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .status-badge {
+      font-size: 0.8rem;
+      font-weight: 700;
+      background: rgba(61, 94, 53, 0.08);
+      border: 1px solid rgba(61, 94, 53, 0.15);
+      color: var(--primary-color);
+      padding: 6px 14px;
+      border-radius: 50px;
+    }
+
+    .btn-toggle-preview {
+      border: 1.5px solid var(--primary-color);
+      background: transparent;
+      color: var(--primary-color);
+      font-family: inherit;
+      font-size: 0.8rem;
+      font-weight: 700;
+      padding: 6px 14px;
+      border-radius: 50px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-toggle-preview:hover {
+      background: rgba(61, 94, 53, 0.05);
+    }
+
+    .btn-toggle-preview.active {
+      background: var(--primary-color);
+      color: #ffffff;
+    }
+
+    /* Grid Layout */
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+    }
+
+    @media (max-width: 768px) {
+      .dashboard-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* Cards */
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02);
+    }
+
+    .card h2 {
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: var(--text-main);
+      margin-bottom: 16px;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* Form Styles */
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-bottom: 14px;
+    }
+
+    .form-group label {
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+
+    .form-group select, .form-group input {
+      padding: 10px;
+      border: 1.5px solid var(--border-color);
+      border-radius: 8px;
+      font-family: inherit;
+      font-size: 0.9rem;
+      color: var(--text-main);
+      background: #fafafa;
+      width: 100%;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .form-group select:focus, .form-group input:focus {
+      border-color: var(--primary-color);
+    }
+
+    .btn {
+      padding: 10px 16px;
+      border-radius: 8px;
+      font-family: inherit;
+      font-size: 0.88rem;
+      font-weight: 700;
+      cursor: pointer;
+      border: none;
+      width: 100%;
+      transition: background 0.2s;
+      background: var(--primary-color);
+      color: #fff;
+    }
+
+    .btn:hover {
+      background: var(--primary-hover);
+    }
+
+    /* Financial Indicators */
+    .finance-metrics {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .metric-box {
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 12px;
+      background: #fafaf9;
+      text-align: center;
+    }
+
+    .metric-label {
+      font-size: 0.72rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+
+    .metric-value {
+      font-size: 1.4rem;
+      font-weight: 800;
+      color: var(--primary-color);
+    }
+
+    /* Main Logs Layout */
+    .logs-section {
+      grid-column: span 3;
+    }
+
+    /* Table Styles */
+    .table-container {
+      overflow-x: auto;
+      width: 100%;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+      font-size: 0.85rem;
+    }
+
+    th, td {
+      padding: 12px;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    th {
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      font-size: 0.75rem;
+    }
+
+    tr:hover {
+      background-color: #f8fafc;
+    }
+
+    /* Badges */
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 0.7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    .badge-downloading { background: #e0f2fe; color: #0369a1; }
+    .badge-printing { background: #fef3c7; color: #d97706; animation: blink 1.2s infinite; }
+    .badge-completed { background: #dcfce7; color: #15803d; }
+    .badge-failed { background: #fee2e2; color: #b91c1c; }
+
+    @keyframes blink {
+      50% { opacity: 0.5; }
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 40px 10px;
+      color: var(--text-muted);
+      font-size: 0.9rem;
+    }
+
+    .empty-icon {
+      font-size: 2.2rem;
+      margin-bottom: 6px;
+    }
+
+    /* PREVIEW PANEL STYLES */
+    .preview-pane h2 {
+      font-size: 1.1rem;
+      font-weight: 800;
+      color: var(--text-main);
+      border-bottom: 2px solid var(--border-color);
+      padding-bottom: 8px;
+      margin-bottom: 12px;
+    }
+
+    .ongoing-card {
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      background: #fafaf9;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .ongoing-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: var(--text-muted);
+    }
+
+    .ongoing-header .printer-tag {
+      background: #e2e8f0;
+      padding: 2px 6px;
+      border-radius: 4px;
+      color: #334155;
+    }
+
+    .ongoing-title {
+      font-size: 0.95rem;
+      font-weight: 800;
+      color: var(--primary-color);
+    }
+
+    .ongoing-viewer {
+      width: 100%;
+      height: 320px;
+      border: 1px solid var(--border-color);
+      background: #ffffff;
+      border-radius: 8px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      padding: 10px;
+      overflow-y: auto;
+    }
+
+    .ongoing-viewer canvas {
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.08);
+      border: 1px solid #cbd5e1;
+      border-radius: 4px;
+      width: 100%;
+      max-width: 250px;
+    }
+
+    .viewer-empty {
+      height: 100%;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-muted);
+      font-size: 0.82rem;
+      text-align: center;
+      padding: 10px;
+    }
+
+    .viewer-empty span {
+      font-size: 2rem;
+      margin-bottom: 6px;
+      opacity: 0.6;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Login Gate Overlay HTML -->
+  <div id="login-overlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.65); backdrop-filter: blur(16px); z-index: 9999; display: flex; justify-content: center; align-items: center;">
+    <div style="background: #ffffff; padding: 32px; border-radius: 16px; max-width: 380px; width: 90%; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); border: 1px solid #e2e8f0; text-align: center;">
+      <h2 style="font-size: 1.45rem; font-weight: 800; color: #0f172a; margin-bottom: 6px;">👨‍💼 Shopkeeper Control</h2>
+      <p id="login-subtitle" style="font-size: 0.82rem; color: #64748b; margin-bottom: 24px;">Enter Shop ID and password to access the console</p>
+      
+      <form id="form-login" style="display: flex; flex-direction: column; gap: 16px; text-align: left;">
+        <div class="form-group" style="display: flex; flex-direction: column; gap: 6px;">
+          <label style="font-size: 0.8rem; font-weight: 700; color: #475569;">Shop ID</label>
+          <input type="text" id="login-username" required style="padding: 10px; border: 1.5px solid #cbd5e1; border-radius: 8px; font-family: inherit; font-size: 0.9rem;" placeholder="e.g. dynamic_shop_1">
+        </div>
+        
+        <div class="form-group" style="display: flex; flex-direction: column; gap: 6px;">
+          <label style="font-size: 0.8rem; font-weight: 700; color: #475569;">Password</label>
+          <input type="password" id="login-password" required style="padding: 10px; border: 1.5px solid #cbd5e1; border-radius: 8px; font-family: inherit; font-size: 0.9rem;" placeholder="Enter password">
+        </div>
+        
+        <button type="submit" class="btn" style="padding: 11px; font-weight: 700; border-radius: 8px; background: #3d5e35; color: white; border: none; cursor: pointer; font-size: 0.9rem; margin-top: 6px; width: 100%; transition: background 0.2s;">Unlock Console</button>
+      </form>
+      <div id="login-error" style="color: #dc2626; font-size: 0.78rem; font-weight: 600; margin-top: 12px; display: none;">❌ Incorrect username or password.</div>
+
+      <div style="margin-top: 18px; font-size: 0.82rem; color: #64748b;">
+        <span id="login-toggle-text">New shopkeeper?</span>
+        <a href="#" id="login-toggle-link" style="color: #3d5e35; font-weight: 700; text-decoration: none; margin-left: 4px;">Register here</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Printer Config Modal Popup (For Adding & Editing Printers) -->
+  <div id="limits-modal-overlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px); z-index: 9995; display: none; align-items: center; justify-content: center;">
+    <div style="background: #ffffff; padding: 30px; border-radius: 12px; max-width: 420px; width: 90%; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1); border: 1px solid #e2e8f0;">
+      <h2 id="modal-title" style="font-size: 1.25rem; font-weight: 700; color: #0f172a; margin-bottom: 8px; display: flex; align-items: center; gap: 8px;">⚙️ Printer Configuration</h2>
+      <p style="font-size: 0.8rem; color: #64748b; margin-bottom: 20px; line-height: 1.4;">Configure settings, printing limits, and color channel access rules for this printer.</p>
+      
+      <form id="form-limits-modal" style="display: flex; flex-direction: column; gap: 14px;">
+        <input type="hidden" id="modal-printer-id">
+
+        <div class="form-group" style="display: flex; flex-direction: column; gap: 6px;">
+          <label style="font-size: 0.78rem; font-weight: 700; color: #475569;">Printer Device</label>
+          <select id="modal-printer-device" required style="padding: 10px; border: 1.5px solid #cbd5e1; border-radius: 8px; font-family: inherit; font-size: 0.9rem;">
+            <option value="">Select OS Printer...</option>
+          </select>
+        </div>
+
+        <div class="form-group" style="display: flex; flex-direction: column; gap: 6px;">
+          <label style="font-size: 0.78rem; font-weight: 700; color: #475569;">Supported Color Mode</label>
+          <select id="modal-printer-color" required style="padding: 10px; border: 1.5px solid #cbd5e1; border-radius: 8px; font-family: inherit; font-size: 0.9rem;">
+            <option value="both">Both (Grayscale & Color)</option>
+            <option value="bw">Black & White Only</option>
+            <option value="color">Color Only</option>
+          </select>
+        </div>
+
+        <div class="form-group" style="display: flex; flex-direction: column; gap: 6px;">
+          <label style="font-size: 0.78rem; font-weight: 700; color: #475569;">Max Pages per Batch</label>
+          <input type="number" id="modal-max-pages" required min="1" style="padding: 10px; border: 1.5px solid #cbd5e1; border-radius: 8px; font-family: inherit; font-size: 0.9rem;" value="80">
+        </div>
+        
+        <div class="form-group" style="display: flex; flex-direction: column; gap: 6px;">
+          <label style="font-size: 0.78rem; font-weight: 700; color: #475569;">User Cooldown Time (minutes)</label>
+          <input type="number" id="modal-cooldown" min="0" placeholder="Optional (e.g. 5)" style="padding: 10px; border: 1.5px solid #cbd5e1; border-radius: 8px; font-family: inherit; font-size: 0.9rem;">
+        </div>
+
+        <div class="form-group" style="display: flex; flex-direction: column; gap: 6px;">
+          <label style="font-size: 0.78rem; font-weight: 700; color: #475569;">Paper Size</label>
+          <select id="modal-paper-size" required style="padding: 10px; border: 1.5px solid #cbd5e1; border-radius: 8px; font-family: inherit; font-size: 0.9rem;">
+            <option value="A4">A4</option>
+            <option value="Letter">Letter</option>
+            <option value="Legal">Legal</option>
+          </select>
+        </div>
+
+        <div class="form-group" style="display: flex; flex-direction: column; gap: 6px;">
+          <label style="font-size: 0.78rem; font-weight: 700; color: #475569;">Page Scaling</label>
+          <select id="modal-page-scaling" required style="padding: 10px; border: 1.5px solid #cbd5e1; border-radius: 8px; font-family: inherit; font-size: 0.9rem;">
+            <option value="fit">Fit to Page (No Margins)</option>
+            <option value="shrink">Shrink to Fit</option>
+            <option value="noscale">No Scaling</option>
+          </select>
+        </div>
+        
+        <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 10px;">
+          <button type="button" id="btn-cancel-limits" style="background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; padding: 10px 16px; font-weight: 600; border-radius: 6px; cursor: pointer;">Cancel</button>
+          <button type="submit" style="background: #3d5e35; color: white; border: none; padding: 10px 16px; font-weight: 600; border-radius: 6px; cursor: pointer;">Save Printer Settings</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Force Pricing Setup Overlay (for first-time login) -->
+  <div id="price-setup-overlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(12px); z-index: 9990; display: none; justify-content: center; align-items: center;">
+    <div style="background: #ffffff; padding: 32px; border-radius: 16px; max-width: 400px; width: 90%; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); border: 1px solid #e2e8f0;">
+      <h2 style="font-size: 1.4rem; font-weight: 800; color: #0f172a; margin-bottom: 8px; text-align: center;">⚙️ Configure Kiosk Prices</h2>
+      <p style="font-size: 0.82rem; color: #64748b; margin-bottom: 24px; text-align: center; line-height: 1.5;">You must set the printing rates before the user portal can be activated.</p>
+      
+      <form id="form-setup-prices" style="display: flex; flex-direction: column; gap: 16px;">
+        <div class="form-group" style="display: flex; flex-direction: column; gap: 6px;">
+          <label style="font-size: 0.8rem; font-weight: 700; color: #475569;">Black & White Price (₹ per page)</label>
+          <input type="number" id="setup-bw-price" required step="0.1" min="0.1" style="padding: 10px; border: 1.5px solid #cbd5e1; border-radius: 8px; font-family: inherit; font-size: 0.9rem;" placeholder="e.g. 2">
+        </div>
+        
+        <div class="form-group" style="display: flex; flex-direction: column; gap: 6px;">
+          <label style="font-size: 0.8rem; font-weight: 700; color: #475569;">Color Price (₹ per page)</label>
+          <input type="number" id="setup-color-price" required step="0.1" min="0.1" style="padding: 10px; border: 1.5px solid #cbd5e1; border-radius: 8px; font-family: inherit; font-size: 0.9rem;" placeholder="e.g. 10">
+        </div>
+        
+        <button type="submit" class="btn" style="padding: 12px; font-weight: 700; border-radius: 8px; background: #3d5e35; color: white; border: none; cursor: pointer; font-size: 0.9rem; margin-top: 6px; width: 100%;">Set Settings & Activate Kiosk</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="dashboard-container" id="dashboard-container">
+    <!-- Header -->
+    <header>
+      <div class="brand">
+        <h1>Insta<span>Print</span> Manager</h1>
+        <p>Local Hardware Agent Control Panel & Store Metrics</p>
+      </div>
+      <div class="header-actions">
+        <button class="btn-toggle-preview" id="btn-toggle-preview">🖥️ Toggle Print Previews</button>
+        <button id="btn-logout" style="border: 1.5px solid var(--danger-color); background: transparent; color: var(--danger-color); font-family: inherit; font-size: 0.8rem; font-weight: 700; padding: 6px 14px; border-radius: 50px; cursor: pointer; transition: all 0.2s;">Logout</button>
+        <div class="status-badge" id="status-badge-shop">Shop ID: default_shop</div>
+      </div>
+    </header>
+
+    <div class="dashboard-layout">
+      <!-- LEFT MAIN CONTENT CONTAINER -->
+      <div class="main-content-pane">
+        <div class="dashboard-grid">
+          
+          <!-- CARD 1: DYNAMIC PRINTER LIST -->
+          <section class="card" style="grid-column: span 2;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+              <h2>🖨️ Printer Configurations</h2>
+              <button id="btn-add-printer" type="button" style="background: var(--primary-color); padding: 8px 14px; font-size: 0.8rem; display: flex; align-items: center; gap: 6px; font-weight: 700; color: white; border: none; border-radius: 6px; cursor: pointer;">➕ Add Printer</button>
+            </div>
+            
+            <div class="table-container" style="max-height: 250px; overflow-y: auto;">
+              <table id="printers-list-table" style="width: 100%; border-collapse: collapse; font-size: 0.8rem;">
+                <thead>
+                  <tr style="border-bottom: 1.5px solid var(--border-color); text-align: left; color: var(--text-muted); font-size: 0.72rem;">
+                    <th style="padding: 10px 8px;">Printer Device Name</th>
+                    <th style="padding: 10px 8px;">Color Mode</th>
+                    <th style="padding: 10px 8px;">Paper Size</th>
+                    <th style="padding: 10px 8px;">Page Scaling</th>
+                    <th style="padding: 10px 8px;">Max Pages</th>
+                    <th style="padding: 10px 8px;">Cooldown</th>
+                    <th style="padding: 10px 8px; text-align: right; width: 140px;">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="printers-list-tbody">
+                  <!-- Mapped printers populate here dynamically -->
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <!-- CARD 2: PRICE & UPI MANAGEMENT -->
+          <section class="card">
+            <h2>💰 Print Rate & UPI Configuration</h2>
+            <form id="form-prices">
+              <div class="form-group">
+                <label for="input-bw-price">B&W Rate (per A4 sheet)</label>
+                <input type="number" id="input-bw-price" min="0.5" step="0.5" value="2">
+              </div>
+              
+              <div class="form-group">
+                <label for="input-color-price">Color Rate (per A4 sheet)</label>
+                <input type="number" id="input-color-price" min="1" step="1" value="10">
+              </div>
+
+              <div class="form-group">
+                <label for="input-upi-id">Merchant UPI ID</label>
+                <input type="text" id="input-upi-id" placeholder="e.g. store@upi" style="padding: 10px; border: 1.5px solid #cbd5e1; border-radius: 8px; font-family: inherit; font-size: 0.9rem; width: 100%; box-sizing: border-box;">
+              </div>
+
+              <button type="submit" class="btn">Save Configuration</button>
+            </form>
+          </section>
+
+          <!-- CARD 3: REVENUE SUMMARY -->
+          <section class="card">
+            <h2>📈 Finance Summary</h2>
+            <div class="finance-metrics">
+              <div class="metric-box">
+                <div class="metric-label">Total Revenue</div>
+                <div class="metric-value" id="revenue-val">₹0.00</div>
+              </div>
+              
+              <div class="metric-box">
+                <div class="metric-label">Completed Jobs</div>
+                <div class="metric-value" id="completed-jobs-val">0</div>
+              </div>
+            </div>
+          </section>
+
+          <!-- CARD 5: PORTAL QR CODE -->
+          <section class="card" style="display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 20px;">
+            <h2>📲 Customer Portal QR</h2>
+            <p style="font-size: 0.72rem; color: var(--text-muted); margin-bottom: 12px; max-width: 240px; line-height: 1.4;">Customers on your local shop network can scan this QR code to load the storefront and print.</p>
+            <div id="qr-container" style="background: #ffffff; border: 1.5px dashed var(--border-color); border-radius: 8px; width: 140px; height: 140px; display: flex; align-items: center; justify-content: center; overflow: hidden; padding: 6px;">
+              <span id="qr-placeholder" style="font-size: 0.8rem; color: var(--text-muted);">Generating QR...</span>
+            </div>
+            <a id="qr-link" href="#" target="_blank" style="font-size: 0.72rem; font-weight: 700; color: var(--primary-color); margin-top: 10px; text-decoration: none; word-break: break-all; max-width: 240px;">http://localhost:8080</a>
+          </section>
+
+          <!-- CARD 4: REAL-TIME PRINTER QUEUE LOGS -->
+          <section class="card logs-section">
+            <h2>📄 Kiosk Queue & Processing Logs</h2>
+            
+            <div class="table-container">
+              <table id="logs-table">
+                <thead>
+                  <tr>
+                    <th>Time</th>
+                    <th>Token</th>
+                    <th>Type</th>
+                    <th>Sheets</th>
+                    <th>Copies</th>
+                    <th>Revenue</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="logs-tbody">
+                  <!-- Logs will populate here -->
+                </tbody>
+              </table>
+              <div class="empty-state" id="empty-state" style="display: none;">
+                <div class="empty-icon">📂</div>
+                <p>Standby mode. No print jobs have been received in this session.</p>
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+
+      <!-- RIGHT ONGOING PREVIEW PANEL (Slides in/out) -->
+      <div class="preview-pane" id="preview-pane">
+        <h2>📷 Ongoing Print Monitor</h2>
+        <div id="preview-cards-container" style="display: flex; flex-direction: column; gap: 16px; width: 100%;">
+          <!-- Preview blocks generated dynamically based on active print channels -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let activeBwJobId = null;
+    let activeColorJobId = null;
+    let knownJobTokens = new Set();
+
+    if (window.Notification && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+
+    // Toggle Preview Panel
+    const btnTogglePreview = document.getElementById('btn-toggle-preview');
+    const container = document.getElementById('dashboard-container');
+
+    btnTogglePreview.addEventListener('click', () => {
+      const active = container.classList.toggle('preview-active');
+      btnTogglePreview.classList.toggle('active', active);
+      btnTogglePreview.innerText = active ? '🖥️ Hide Print Previews' : '🖥️ Toggle Print Previews';
+    });
+
+    // Render PDF pages onto canvas inside a container
+    async function renderOngoingPdf(url, containerId) {
+      const containerEl = document.getElementById(containerId);
+      if (!containerEl) return;
+      
+      containerEl.innerHTML = '<div class="viewer-empty"><span>⏳</span>Loading PDF pages...</div>';
+      
+      if (url.includes('mock-kiosk-bucket') || url.startsWith('data:')) {
+        containerEl.innerHTML = '';
+        const canvas = document.createElement('canvas');
+        canvas.width = 240;
+        canvas.height = 320;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#f8fafc';
+        ctx.fillRect(0, 0, 240, 320);
+        ctx.strokeStyle = '#e2e8f0';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(10, 10, 220, 300);
+        
+        ctx.fillStyle = '#0f172a';
+        ctx.font = 'bold 13px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('📄 MOCK PRINT PREVIEW', 120, 100);
+        
+        ctx.fillStyle = '#64748b';
+        ctx.font = '10px sans-serif';
+        ctx.fillText('Real PDF preview is only available', 120, 140);
+        ctx.fillText('for actual file uploads.', 120, 155);
+        
+        ctx.fillStyle = '#22c55e';
+        ctx.font = 'bold 12px sans-serif';
+        ctx.fillText('✓ Auto-fit Layout Active', 120, 210);
+        
+        containerEl.appendChild(canvas);
+        return;
+      }
+
+      try {
+        const proxyUrl = `/api/pdf-proxy?url=${encodeURIComponent(url)}`;
+        const loadingTask = pdfjsLib.getDocument({ url: proxyUrl });
+        const pdf = await loadingTask.promise;
+        containerEl.innerHTML = ''; // clear loader
+        
+        // Render all pages
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const viewport = page.getViewport({ scale: 0.6 });
+          const canvas = document.createElement('canvas');
+          const context = canvas.getContext('2d');
+          canvas.width = viewport.width;
+          canvas.height = viewport.height;
+          
+          containerEl.appendChild(canvas);
+          await page.render({ canvasContext: context, viewport: viewport }).promise;
+        }
+      } catch (err) {
+        console.error("Failed to render ongoing PDF:", err);
+        containerEl.innerHTML = '<div class="viewer-empty" style="color:var(--danger-color)"><span>⚠️</span>Preview failed to load.</div>';
+      }
+    }
+
+    // Fetch and populate config details
+    async function loadDashboardData() {
+      try {
+        const response = await fetch('/api/config');
+        const config = await response.json();
+
+        // Check if prices are configured (not null/empty)
+        const priceOverlay = document.getElementById('price-setup-overlay');
+        if (config.bwPrice === null || config.colorPrice === null || config.bwPrice === undefined || config.colorPrice === undefined) {
+          if (priceOverlay) priceOverlay.style.display = 'flex';
+        } else {
+          if (priceOverlay) priceOverlay.style.display = 'none';
+        }
+
+        // Update Finance
+        document.getElementById('revenue-val').innerText = `₹${(config.revenue || 0).toFixed(2)}`;
+        document.getElementById('completed-jobs-val').innerText = config.ordersCount || 0;
+
+        // Set form prices and configurations (only if not focused to avoid cursor resetting)
+        const activeEl = document.activeElement;
+        const bwInput = document.getElementById('input-bw-price');
+        const colorInput = document.getElementById('input-color-price');
+        const upiInput = document.getElementById('input-upi-id');
+
+        if (activeEl !== bwInput) bwInput.value = config.bwPrice !== null ? config.bwPrice : '';
+        if (activeEl !== colorInput) colorInput.value = config.colorPrice !== null ? config.colorPrice : '';
+        if (activeEl !== upiInput) upiInput.value = config.upiId || '';
+
+        // Display stored permanent QR code from database
+        const qrContainer = document.getElementById('qr-container');
+        const qrLink = document.getElementById('qr-link');
+        const frontendUrl = config.frontendUrl || 'http://localhost:8080';
+        if (qrContainer && qrLink) {
+          if (config.qrCode) {
+            qrContainer.innerHTML = `<img src="${config.qrCode}" alt="Storefront QR" style="width: 100%; height: 100%; object-fit: contain;">`;
+          } else {
+            qrContainer.innerHTML = `<img src="https://api.qrserver.com/v1/create-qr-code/?size=128x128&data=${encodeURIComponent(frontendUrl)}" alt="Storefront QR" style="width: 100%; height: 100%; object-fit: contain;">`;
+          }
+          qrLink.href = frontendUrl;
+          qrLink.innerText = frontendUrl;
+        }
+
+        // Update Shop ID badge
+        const shopBadge = document.getElementById('status-badge-shop');
+        if (shopBadge && config.shopId) {
+          shopBadge.innerText = `Shop ID: ${config.shopId}`;
+        }
+
+        // Update printers table only if modified to prevent UI flicker
+        const printersJson = JSON.stringify(config.printers || {});
+        if (JSON.stringify(activePrinters) !== printersJson) {
+          activePrinters = config.printers || {};
+          renderPrintersList();
+        }
+
+        // Render dynamic print monitor blocks based on mappings
+        updateOngoingMonitors(config);
+
+        // Update log rows
+        const tbody = document.getElementById('logs-tbody');
+        const emptyState = document.getElementById('empty-state');
+        tbody.innerHTML = '';
+
+        if (config.logs && config.logs.length > 0) {
+          emptyState.style.display = 'none';
+          config.logs.forEach(log => {
+            // Trigger browser popup notification for new pending jobs
+            if (log.status === 'pending' && !knownJobTokens.has(log.token)) {
+              knownJobTokens.add(log.token);
+              if (window.Notification && Notification.permission === 'granted') {
+                new Notification(`🆕 New Print Job: ${log.token}`, {
+                  body: `Type: ${log.printType.toUpperCase()} | Sheets: ${log.sheets} × ${log.copies} copies`,
+                  icon: '/favicon.ico'
+                });
+              }
+            } else {
+              knownJobTokens.add(log.token);
+            }
+
+            const isPending = log.status === 'pending';
+            const isPendingPayment = log.status === 'pending_payment';
+            
+            let actionBtn = '-';
+            if (isPending) {
+              actionBtn = `<button class="btn-priority" onclick="togglePriority('${log.id}', ${log.priority})" style="background: ${log.priority ? '#dc2626' : '#2563eb'}; color: white; border: none; border-radius: 4px; padding: 4px 8px; font-size: 0.72rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 4px;">
+                  <span>${log.priority ? '★ High' : '☆ normal'}</span>
+                </button>`;
+            } else if (isPendingPayment) {
+              actionBtn = `<button class="btn-confirm" onclick="confirmPayment('${log.id}')" style="background: #16a34a; color: white; border: none; border-radius: 4px; padding: 6px 10px; font-size: 0.72rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 4px;">
+                  <span>✅ Confirm & Print</span>
+                </button>`;
+            }
+
+            const tr = document.createElement('tr');
+            if (log.priority && isPending) {
+              tr.style.background = '#fff1f2';
+            }
+            tr.innerHTML = `
+              <td>${log.timestamp}</td>
+              <td style="font-weight: 700; color: #3d5e35;">${log.token}</td>
+              <td>${log.printType === 'bw' ? '🔳 B&W' : '🌈 Color'}</td>
+              <td>${log.sheets}</td>
+              <td>${log.copies}</td>
+              <td style="font-weight: 600;">₹${log.cost.toFixed(2)}</td>
+              <td><span class="badge badge-${log.status}">${log.status}</span></td>
+              <td>${actionBtn}</td>
+            `;
+            tbody.appendChild(tr);
+          });
+        } else {
+          emptyState.style.display = 'block';
+        }
+
+      } catch (err) {
+        console.error('Failed to load dashboard data:', err);
+      }
+    }
+
+    // Generate dynamic ongoing preview card blocks
+    function updateOngoingMonitors(config) {
+      const cardsContainer = document.getElementById('preview-cards-container');
+      
+      const isSinglePrinter = !config.bwPrinter || !config.colorPrinter || (config.bwPrinter === config.colorPrinter);
+      
+      if (isSinglePrinter) {
+        // Render Unified Printer Preview
+        const activeJob = config.activeBwJob || config.activeColorJob;
+        
+        let cardHtml = '';
+        if (activeJob) {
+          cardHtml = `
+            <div class="ongoing-card">
+              <div class="ongoing-header">
+                <span>ONGOING PRINT</span>
+                <span class="printer-tag">${config.bwPrinter || 'Default System Printer'}</span>
+              </div>
+              <div class="ongoing-title">Token: ${activeJob.token} (${activeJob.printType === 'bw' ? 'B&W' : 'Color'})</div>
+              <div style="font-size: 0.72rem; color:var(--text-muted); margin-top:-4px;">
+                ${activeJob.sheets} sheets × ${activeJob.copies} copy(ies)
+              </div>
+              <div class="ongoing-viewer" id="unified-viewer"></div>
+            </div>
+          `;
+        } else {
+          cardHtml = `
+            <div class="ongoing-card" style="text-align:center; padding: 40px 10px;">
+              <div class="viewer-empty">
+                <span>💤</span>
+                <strong>Printer Standby</strong>
+                <p style="font-size:0.75rem; color:var(--text-muted); margin-top:4px;">No active files currently spooling.</p>
+              </div>
+            </div>
+          `;
+        }
+        
+        cardsContainer.innerHTML = cardHtml;
+
+        // Render PDF content if a new job starts
+        if (activeJob) {
+          if (activeJob.id !== activeBwJobId && activeJob.id !== activeColorJobId) {
+            activeBwJobId = activeJob.printType === 'bw' ? activeJob.id : null;
+            activeColorJobId = activeJob.printType === 'color' ? activeJob.id : null;
+            renderOngoingPdf(activeJob.fileUrl, 'unified-viewer');
+          }
+        } else {
+          activeBwJobId = null;
+          activeColorJobId = null;
+        }
+
+      } else {
+        // Render Dual Printer Previews side-by-side (different printers)
+        let cardsHtml = '';
+        
+        // 1. B&W Printer Card
+        if (config.activeBwJob) {
+          cardsHtml += `
+            <div class="ongoing-card">
+              <div class="ongoing-header">
+                <span>ONGOING B&W PRINT</span>
+                <span class="printer-tag">${config.bwPrinter}</span>
+              </div>
+              <div class="ongoing-title">Token: ${config.activeBwJob.token}</div>
+              <div style="font-size: 0.72rem; color:var(--text-muted); margin-top:-4px;">
+                ${config.activeBwJob.sheets} sheets × ${config.activeBwJob.copies} copy(ies)
+              </div>
+              <div class="ongoing-viewer" id="bw-viewer"></div>
+            </div>
+          `;
+        } else {
+          cardsHtml += `
+            <div class="ongoing-card">
+              <div class="ongoing-header">
+                <span>B&W PRINTER STANDBY</span>
+                <span class="printer-tag">${config.bwPrinter}</span>
+              </div>
+              <div class="viewer-empty" style="padding: 24px 0;">
+                <span>💤</span>No active B&W print job
+              </div>
+            </div>
+          `;
+        }
+
+        // 2. Color Printer Card
+        if (config.activeColorJob) {
+          cardsHtml += `
+            <div class="ongoing-card">
+              <div class="ongoing-header">
+                <span>ONGOING COLOR PRINT</span>
+                <span class="printer-tag">${config.colorPrinter}</span>
+              </div>
+              <div class="ongoing-title">Token: ${config.activeColorJob.token}</div>
+              <div style="font-size: 0.72rem; color:var(--text-muted); margin-top:-4px;">
+                ${config.activeColorJob.sheets} sheets × ${config.activeColorJob.copies} copy(ies)
+              </div>
+              <div class="ongoing-viewer" id="color-viewer"></div>
+            </div>
+          `;
+        } else {
+          cardsHtml += `
+            <div class="ongoing-card">
+              <div class="ongoing-header">
+                <span>COLOR PRINTER STANDBY</span>
+                <span class="printer-tag">${config.colorPrinter}</span>
+              </div>
+              <div class="viewer-empty" style="padding: 24px 0;">
+                <span>💤</span>No active Color print job
+              </div>
+            </div>
+          `;
+        }
+
+        cardsContainer.innerHTML = cardsHtml;
+
+        // Render PDF contents when job IDs shift
+        if (config.activeBwJob) {
+          if (config.activeBwJob.id !== activeBwJobId) {
+            activeBwJobId = config.activeBwJob.id;
+            renderOngoingPdf(config.activeBwJob.fileUrl, 'bw-viewer');
+          }
+        } else {
+          activeBwJobId = null;
+        }
+
+        if (config.activeColorJob) {
+          if (config.activeColorJob.id !== activeColorJobId) {
+            activeColorJobId = config.activeColorJob.id;
+            renderOngoingPdf(config.activeColorJob.fileUrl, 'color-viewer');
+          }
+        } else {
+          activeColorJobId = null;
+        }
+      }
+    }
+
+    async function togglePriority(jobId, currentPriority) {
+      try {
+        const response = await fetch(`/api/jobs/${jobId}/priority`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ priority: !currentPriority })
+        });
+        const result = await response.json();
+        if (result.success) {
+          loadDashboardData();
+        }
+      } catch (err) {
+        console.error("Failed to toggle priority:", err);
+      }
+    }
+
+    async function confirmPayment(jobId) {
+      try {
+        const response = await fetch(`/api/jobs/${jobId}/status`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'pending', paid: true })
+        });
+        const result = await response.json();
+        if (result.ok || result.success) {
+          loadDashboardData();
+        }
+      } catch (err) {
+        console.error("Failed to confirm payment:", err);
+      }
+    }
+
+    // Check Authentication Gate
+    function checkAuthentication() {
+      const auth = localStorage.getItem('dashboard_authenticated');
+      const overlay = document.getElementById('login-overlay');
+      if (auth === 'true') {
+        overlay.style.display = 'none';
+      } else {
+        overlay.style.display = 'flex';
+      }
+    }
+
+    let authAction = 'login'; // 'login' or 'register'
+
+    const toggleLink = document.getElementById('login-toggle-link');
+    const toggleText = document.getElementById('login-toggle-text');
+    const loginTitle = document.querySelector('#login-overlay h2');
+    const loginSubtitle = document.getElementById('login-subtitle');
+    const loginSubmitBtn = document.querySelector('#form-login button[type="submit"]');
+
+    toggleLink.addEventListener('click', (e) => {
+      e.preventDefault();
+      if (authAction === 'login') {
+        authAction = 'register';
+        loginTitle.innerHTML = '📝 Register New Shop';
+        loginSubtitle.textContent = 'Choose a new Shop ID and Password to register';
+        loginSubmitBtn.textContent = 'Register & Open Console';
+        toggleText.textContent = 'Already have a shop?';
+        toggleLink.textContent = 'Login here';
+      } else {
+        authAction = 'login';
+        loginTitle.innerHTML = '👨‍💼 Shopkeeper Control';
+        loginSubtitle.textContent = 'Enter Shop ID and password to access the console';
+        loginSubmitBtn.textContent = 'Unlock Console';
+        toggleText.textContent = 'New shopkeeper?';
+        toggleLink.textContent = 'Register here';
+      }
+      document.getElementById('login-error').style.display = 'none';
+    });
+
+    document.getElementById('form-login').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const shopId = document.getElementById('login-username').value;
+      const pass = document.getElementById('login-password').value;
+      const errorEl = document.getElementById('login-error');
+
+      try {
+        const response = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ shopId, password: pass, action: authAction })
+        });
+        const result = await response.json();
+        if (result.success) {
+          localStorage.setItem('dashboard_authenticated', 'true');
+          localStorage.setItem('dashboard_shop_id', result.shopId);
+          if (result.token) localStorage.setItem('dashboard_token', result.token);
+          
+          document.getElementById('login-overlay').style.display = 'none';
+          errorEl.style.display = 'none';
+          loadDashboardData();
+        } else {
+          errorEl.textContent = '❌ ' + (result.error || 'Login failed.');
+          errorEl.style.display = 'block';
+        }
+      } catch (err) {
+        errorEl.textContent = '❌ Failed to connect to local print agent.';
+        errorEl.style.display = 'block';
+      }
+    });
+
+    document.getElementById('btn-logout').addEventListener('click', () => {
+      localStorage.removeItem('dashboard_authenticated');
+      localStorage.removeItem('dashboard_shop_id');
+      localStorage.removeItem('dashboard_token');
+      location.reload();
+    });
+
+    // Run auth check immediately
+    checkAuthentication();
+
+    let activePrinters = {};
+
+    // Fetch installed printers and populate dropdown in modal
+    async function loadPrinters() {
+      try {
+        const response = await fetch('/api/printers');
+        const printers = await response.json();
+
+        const selectDevice = document.getElementById('modal-printer-device');
+        selectDevice.innerHTML = '<option value="">Select OS Printer...</option>';
+
+        printers.forEach(printer => {
+          const printerName = printer.name || printer;
+          const opt = document.createElement('option');
+          opt.value = printerName;
+          opt.textContent = printerName;
+          selectDevice.appendChild(opt);
+        });
+      } catch (err) {
+        console.error('Failed to load printers:', err);
+      }
+    }
+
+    function renderPrintersList() {
+      const tbody = document.getElementById('printers-list-tbody');
+      tbody.innerHTML = '';
+      
+      const printerIds = Object.keys(activePrinters);
+      if (printerIds.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 20px; color: var(--text-muted);">No printers configured yet. Click "Add Printer" to start.</td></tr>`;
+        return;
+      }
+      
+      printerIds.forEach(id => {
+        const printer = activePrinters[id];
+        const tr = document.createElement('tr');
+        tr.style.borderBottom = '1px solid var(--border-color)';
+        
+        let colorModeText = 'Both';
+        if (printer.colorMode === 'bw') colorModeText = 'B&W Only';
+        if (printer.colorMode === 'color') colorModeText = 'Color Only';
+        
+        const cooldownText = printer.cooldownMin ? `${printer.cooldownMin} mins` : 'None';
+        const paperSize = printer.paperSize || 'A4';
+        const pageScaling = printer.scale || 'fit';
+        let pageScalingText = 'Fit to Page';
+        if (pageScaling === 'shrink') pageScalingText = 'Shrink to Fit';
+        if (pageScaling === 'noscale') pageScalingText = 'No Scaling';
+        
+        tr.innerHTML = `
+          <td style="padding: 10px 8px; font-weight: 500; color: var(--text-main);">${printer.name}</td>
+          <td style="padding: 10px 8px;">${colorModeText}</td>
+          <td style="padding: 10px 8px;">${paperSize}</td>
+          <td style="padding: 10px 8px;">${pageScalingText}</td>
+          <td style="padding: 10px 8px;">${printer.maxPages} pages</td>
+          <td style="padding: 10px 8px;">${cooldownText}</td>
+          <td style="padding: 10px 8px; text-align: right;">
+            <button onclick="editPrinter('${id}')" style="background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px 8px; font-size: 0.72rem; font-weight: 600; color: #334155; cursor: pointer; margin-right: 4px;">Edit</button>
+            <button onclick="deletePrinter('${id}')" style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 4px; padding: 4px 8px; font-size: 0.72rem; font-weight: 600; color: #dc2626; cursor: pointer;">Delete</button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    window.editPrinter = function(id) {
+      const printer = activePrinters[id];
+      if (!printer) return;
+      
+      document.getElementById('modal-title').textContent = '⚙️ Edit Printer Configuration';
+      document.getElementById('modal-printer-id').value = id;
+      document.getElementById('modal-printer-device').value = printer.name;
+      document.getElementById('modal-printer-color').value = printer.colorMode;
+      document.getElementById('modal-max-pages').value = printer.maxPages;
+      document.getElementById('modal-cooldown').value = printer.cooldownMin || '';
+      document.getElementById('modal-paper-size').value = printer.paperSize || 'A4';
+      document.getElementById('modal-page-scaling').value = printer.scale || 'fit';
+      
+      document.getElementById('limits-modal-overlay').style.display = 'flex';
+    };
+
+    window.deletePrinter = async function(id) {
+      if (!confirm('Are you sure you want to remove this printer?')) return;
+      
+      delete activePrinters[id];
+      
+      const bwPrice = document.getElementById('input-bw-price').value;
+      const colorPrice = document.getElementById('input-color-price').value;
+      
+      try {
+        const response = await fetch('/api/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ bwPrice, colorPrice, printers: activePrinters })
+        });
+        const res = await response.json();
+        if (res.success) {
+          loadDashboardData();
+        }
+      } catch (err) {
+        alert('Failed to delete printer.');
+      }
+    };
+
+    // Bind Add Printer button
+    document.getElementById('btn-add-printer').addEventListener('click', () => {
+      document.getElementById('modal-title').textContent = '➕ Add Printer Configuration';
+      document.getElementById('modal-printer-id').value = '';
+      document.getElementById('modal-printer-device').value = '';
+      document.getElementById('modal-printer-color').value = 'both';
+      document.getElementById('modal-max-pages').value = '80';
+      document.getElementById('modal-cooldown').value = '';
+      document.getElementById('modal-paper-size').value = 'A4';
+      document.getElementById('modal-page-scaling').value = 'fit';
+      
+      document.getElementById('limits-modal-overlay').style.display = 'flex';
+    });
+
+    // Handle Cancel Limits modal
+    document.getElementById('btn-cancel-limits').addEventListener('click', () => {
+      document.getElementById('limits-modal-overlay').style.display = 'none';
+    });
+
+    // Handle Limits Modal Form submit: Save both printers & limits configurations
+    document.getElementById('form-limits-modal').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      const printerId = document.getElementById('modal-printer-id').value || 'printer_' + Date.now();
+      const name = document.getElementById('modal-printer-device').value;
+      const colorMode = document.getElementById('modal-printer-color').value;
+      const maxPages = parseInt(document.getElementById('modal-max-pages').value) || 80;
+      const cooldownMin = parseInt(document.getElementById('modal-cooldown').value) || 0;
+      const paperSize = document.getElementById('modal-paper-size').value;
+      const scale = document.getElementById('modal-page-scaling').value;
+      
+      activePrinters[printerId] = {
+        id: printerId,
+        name,
+        colorMode,
+        maxPages,
+        cooldownMin,
+        paperSize,
+        scale
+      };
+
+      const bwPrice = document.getElementById('input-bw-price').value;
+      const colorPrice = document.getElementById('input-color-price').value;
+
+      try {
+        const response = await fetch('/api/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ bwPrice, colorPrice, printers: activePrinters })
+        });
+        const res = await response.json();
+        if (res.success) {
+          alert('Printer configurations successfully updated!');
+          document.getElementById('limits-modal-overlay').style.display = 'none';
+          loadDashboardData();
+        } else {
+          alert('Failed to save configuration settings.');
+        }
+      } catch (err) {
+        console.error('Failed to submit settings:', err);
+        alert('Failed to save printer configuration.');
+      }
+    });
+
+    // Submit Price configurations
+    document.getElementById('form-prices').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const bwPrice = document.getElementById('input-bw-price').value;
+      const colorPrice = document.getElementById('input-color-price').value;
+      const upiId = document.getElementById('input-upi-id').value;
+
+      try {
+        const response = await fetch('/api/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ bwPrice, colorPrice, upiId })
+        });
+        const res = await response.json();
+        if (res.success) {
+          alert(res.message);
+        }
+      } catch (err) {
+        alert('Failed to update cloud configurations.');
+      }
+    });
+
+    // Submit Force Price setup
+    document.getElementById('form-setup-prices').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const bwPrice = document.getElementById('setup-bw-price').value;
+      const colorPrice = document.getElementById('setup-color-price').value;
+      const maxPages = 80;
+      const cooldownMin = 5;
+
+      // Create a default printer setup to register initial device config
+      const defaultPrinterId = 'printer_default';
+      const defaultPrinterSetup = {
+        [defaultPrinterId]: {
+          id: defaultPrinterId,
+          name: 'SYSTEM DEFAULT',
+          colorMode: 'both',
+          maxPages,
+          cooldownMin,
+          paperSize: 'A4',
+          scale: 'fit'
+        }
+      };
+
+      try {
+        const response = await fetch('/api/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ bwPrice, colorPrice, printers: defaultPrinterSetup })
+        });
+        const res = await response.json();
+        if (res.success) {
+          document.getElementById('price-setup-overlay').style.display = 'none';
+          loadDashboardData();
+        }
+      } catch (err) {
+        alert('Failed to set initial prices.');
+      }
+    });
+
+    // Load static printer list once
+    loadPrinters().then(() => {
+      // Load config/logs immediately
+      loadDashboardData();
+      // Poll logs and metrics every 3 seconds
+      setInterval(loadDashboardData, 3000);
+    });
+  </script>
+
+</body>
+</html>

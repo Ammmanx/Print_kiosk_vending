@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>InstaPrint | Kiosk Print Store</title>
+  
+  <!-- PWA Web App Manifest -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#3d5e35">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <!-- Stylesheet -->
+  <link rel="stylesheet" href="index.css">
+
+  <!-- CDNs for Libraries -->
+  <script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+  <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-storage-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
+  <!-- PDF.js library for high-fidelity client-side PDF rendering in previews -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+  <script>
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+  </script>
+</head>
+  <!-- Kiosk Configuring Overlay -->
+  <div id="kiosk-config-overlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(24px); z-index: 10000; display: none; flex-direction: column; justify-content: center; align-items: center; text-align: center; color: white; padding: 20px;">
+    <div style="background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.2); padding: 40px 30px; border-radius: 20px; max-width: 420px; width: 90%; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);">
+      <div style="font-size: 3.5rem; margin-bottom: 24px; animation: spin 4s linear infinite; display: inline-block;">⚙️</div>
+      <h2 style="font-size: 1.6rem; font-weight: 800; margin-bottom: 12px; color: #f8fafc;">Kiosk Configuring</h2>
+      <p style="font-size: 0.95rem; color: #cbd5e1; line-height: 1.6; margin-bottom: 0;">The operator is currently configuring printing rates and settings. Please stand by.</p>
+    </div>
+  </div>
+
+  <div class="container">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="logo">
+        <span class="logo-icon">🍏</span>
+        <h1>Insta<span>Print</span></h1>
+      </div>
+      <div class="status-badge">
+        <span class="pulse-dot"></span> Kiosk Online
+      </div>
+    </header>
+
+    <!-- Step Progress Indicator -->
+    <div class="step-indicator">
+      <div class="step active" id="step-node-1">
+        <div class="step-number">1</div>
+        <div class="step-label">Upload</div>
+      </div>
+      <div class="step-line" id="step-line-1"></div>
+      <div class="step" id="step-node-2">
+        <div class="step-number">2</div>
+        <div class="step-label">Settings</div>
+      </div>
+      <div class="step-line" id="step-line-2"></div>
+      <div class="step" id="step-node-3">
+        <div class="step-number">3</div>
+        <div class="step-label">Print</div>
+      </div>
+    </div>
+
+    <!-- Main Content Panels -->
+    <main class="main-card">
+      
+      <!-- STEP 1: UPLOAD PANEL -->
+      <section id="panel-upload" class="panel active">
+        <div class="section-title">
+          <h2>Upload Documents / Images</h2>
+          <p>Select files (Images, PDFs, Text, Word, Slides) to print. You can merge multiple items onto a single sheet of paper to save cost. <em>(For Office files, we recommend converting to PDF first to preserve exact layouts)</em>.</p>
+        </div>
+
+        <div class="drop-zone" id="drop-zone">
+          <input type="file" id="file-input" multiple accept="image/jpeg, image/png, application/pdf, text/plain, .doc, .docx, .ppt, .pptx, .xls, .xlsx" class="file-hidden">
+          <div class="drop-zone-content">
+            <div class="upload-icon">📂</div>
+            <p class="drop-text">Drag & drop files here or <span>browse</span></p>
+            <p class="file-support">Supports Images, PDFs, Text, Word, slides & spreadsheets</p>
+          </div>
+        </div>
+
+        <div class="preview-section" id="preview-section" style="display: none;">
+          <h3>Uploaded Files (<span id="file-count">0</span>)</h3>
+          <div class="preview-grid" id="preview-grid"></div>
+        </div>
+
+        <div class="action-footer">
+          <button id="btn-goto-settings" class="btn btn-primary" disabled>
+            Configure Settings <span class="arrow">→</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- STEP 2: SETTINGS PANEL -->
+      <section id="panel-settings" class="panel">
+        <div class="section-title">
+          <h2>Print Setup</h2>
+          <p>Choose colors, copies, and configure print layout options below.</p>
+        </div>
+
+        <div class="settings-grid">
+          <!-- Print Color Selection -->
+          <div class="settings-card">
+            <h3>Print Type</h3>
+            <div class="print-type-toggle">
+              <label class="toggle-option active" id="label-bw">
+                <input type="radio" name="printType" value="bw" checked class="hidden-radio">
+                <div class="toggle-content">
+                  <span class="icon">🔳</span>
+                  <div class="details">
+                    <span class="title">Black & White (B&W)</span>
+                    <span class="subtitle">₹2.00 / sheet</span>
+                  </div>
+                </div>
+              </label>
+              <label class="toggle-option" id="label-color">
+                <input type="radio" name="printType" value="color" class="hidden-radio">
+                <div class="toggle-content">
+                  <span class="icon">🌈</span>
+                  <div class="details">
+                    <span class="title">Color Print</span>
+                    <span class="subtitle">₹10.00 / sheet</span>
+                  </div>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <!-- Layout Options Selector -->
+          <div class="settings-card">
+            <h3>Print Layout (Images per Sheet)</h3>
+            <div class="layout-selector-grid">
+              <button class="layout-btn active" data-layout="1">1</button>
+              <button class="layout-btn" data-layout="2">2</button>
+              <button class="layout-btn" data-layout="4">4</button>
+              <button class="layout-btn" data-layout="6">6</button>
+              <button class="layout-btn" data-layout="8">8</button>
+              <button class="layout-btn" id="btn-layout-custom" data-layout="custom">Custom</button>
+            </div>
+            
+            <!-- Custom Grid Settings (Hidden by default) -->
+            <div class="custom-grid-controls" id="custom-grid-controls" style="display: none;">
+              <div class="control-row">
+                <label for="custom-images-count">Images per Page:</label>
+                <div class="counter-input-group">
+                  <button class="small-counter-btn" id="btn-img-dec" type="button">−</button>
+                  <input type="number" id="custom-images-count" value="5" min="1" max="16" readonly>
+                  <button class="small-counter-btn" id="btn-img-inc" type="button">+</button>
+                </div>
+              </div>
+              <div class="grid-status-info">
+                Will fit <strong id="custom-grid-info">5</strong> images dynamically using smart aspect-ratio packing.
+              </div>
+            </div>
+          </div>
+
+          <!-- Smart Packing Toggle -->
+          <div class="settings-card" id="packing-mode-card" style="display: none;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <div>
+                <h3 style="margin: 0; font-size: 0.95rem;">🧩 Smart Collage Packing</h3>
+                <p style="margin: 2px 0 0 0; font-size: 0.72rem; color: var(--text-muted);">Arrange different aspect ratios into rows to maximize print size</p>
+              </div>
+              <label class="switch-container">
+                <input type="checkbox" id="toggle-smart-packing" checked>
+                <span class="switch-slider"></span>
+              </label>
+            </div>
+          </div>
+
+          <!-- Copies Selection -->
+          <div class="settings-card">
+            <h3>Number of Copies</h3>
+            <div class="copies-counter">
+              <button class="counter-btn" id="btn-copy-dec" type="button">−</button>
+              <input type="number" id="input-copies" value="1" min="1" max="99" readonly>
+              <button class="counter-btn" id="btn-copy-inc" type="button">+</button>
+            </div>
+          </div>
+
+          <!-- Paper Size Selection -->
+          <div class="settings-card">
+            <h3>Paper Size</h3>
+            <select id="select-paper-size" style="width: 100%; padding: 10px; border: 1.5px solid var(--border-color); border-radius: 8px; font-family: inherit; font-size: 0.9rem; background: #ffffff; color: var(--text-main); font-weight: 500;">
+              <option value="A4" selected>A4 Paper</option>
+              <option value="Letter">Letter</option>
+              <option value="Legal">Legal</option>
+            </select>
+          </div>
+
+          <!-- Demo Print Mode (Bypass Payment) -->
+          <div class="settings-card">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <div>
+                <h3 style="margin: 0; font-size: 0.95rem;">🧪 Demo Print Mode</h3>
+                <p style="margin: 2px 0 0 0; font-size: 0.72rem; color: var(--text-muted);">Bypass Razorpay gateway for local printer testing</p>
+              </div>
+              <label class="switch-container">
+                <input type="checkbox" id="toggle-demo-mode">
+                <span class="switch-slider"></span>
+              </label>
+            </div>
+          <!-- Page Selection (for PDFs / Documents) -->
+          <div class="settings-card" id="page-selection-card" style="display: none; grid-column: span 1 / span 2;">
+            <h3 style="margin: 0; font-size: 0.95rem;">📖 Select Pages to Print</h3>
+            <p style="margin: 2px 0 8px 0; font-size: 0.72rem; color: var(--text-muted);">Specify specific pages or page ranges (e.g. 1-3, 5, 8-10). Leave blank to print all pages.</p>
+            <input type="text" id="input-page-range" style="width: 100%; padding: 10px; border: 1.5px solid var(--border-color); border-radius: 8px; font-family: inherit; font-size: 0.85rem;" placeholder="e.g. 1-3, 5, 8">
+          </div>
+
+          <!-- Customer Notification Details -->
+          <div class="settings-card" style="grid-column: span 1 / span 2;">
+            <h3 style="margin: 0; font-size: 0.95rem;">📧 Receive Receipt & ETA</h3>
+            <p style="margin: 2px 0 8px 0; font-size: 0.72rem; color: var(--text-muted);">Enter email address (SMS/QR not required)</p>
+            <input type="email" id="input-customer-contact" style="width: 100%; padding: 10px; border: 1.5px solid var(--border-color); border-radius: 8px; font-family: inherit; font-size: 0.85rem;" placeholder="e.g. customer@example.com">
+          </div>
+        </div>
+
+        <!-- Print Layout Preview Card -->
+        <div class="settings-card" id="layout-preview-card" style="display: none; margin-bottom: 14px;">
+          <h3 style="margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between;">
+            <span>🖨️ A4 Paper Sheet Preview</span>
+            <span style="font-size: 0.72rem; font-weight: 500; color: var(--text-muted);">Matches print result</span>
+          </h3>
+          <div id="sheets-preview-container" class="sheets-preview-container">
+            <!-- Dynamically generated sheet previews go here -->
+          </div>
+        </div>
+
+        <!-- Billing Summary -->
+        <div class="billing-card">
+          <h3>Bill Summary</h3>
+          <div class="billing-details">
+            <div class="bill-row">
+              <span>Total Images Uploaded</span>
+              <span id="bill-images">0</span>
+            </div>
+            <div class="bill-row">
+              <span>Calculated Paper Sheets</span>
+              <strong id="bill-pages">0</strong>
+            </div>
+            <div class="bill-row">
+              <span>Copies</span>
+              <span id="bill-copies">1</span>
+            </div>
+            <div class="bill-row">
+              <span>Rate per sheet</span>
+              <span id="bill-rate">₹2.00</span>
+            </div>
+            <hr class="bill-divider">
+            <div class="bill-row total">
+              <span>Total Amount</span>
+              <span id="bill-total">₹0.00</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="action-footer double-btn">
+          <button id="btn-back-to-upload" class="btn btn-secondary">
+            ← Back
+          </button>
+          <button id="btn-start-checkout" class="btn btn-primary">
+            Pay & Queue Print 💳
+          </button>
+        </div>
+      </section>
+
+      <!-- STEP 3: PROCESSING / RECEIPT PANEL -->
+      <section id="panel-printing" class="panel">
+        <!-- Loader / Processing View -->
+        <div class="status-container" id="processing-view">
+          <div class="spinner-container">
+            <div class="spinner"></div>
+            <div class="spinner-core">📄</div>
+          </div>
+          <h2 id="status-title">Processing Document</h2>
+          <p id="status-desc">Compiling images into A4 layout sheets...</p>
+          
+          <div class="progress-bar-container">
+            <div class="progress-bar" id="processing-progress" style="width: 10%;"></div>
+          </div>
+        </div>
+
+        <!-- Print Receipt View (Success) -->
+        <div class="receipt-container" id="receipt-view" style="display: none;">
+          <div class="success-banner">
+            <span class="success-icon">✓</span>
+            <h2>Order Placed!</h2>
+            <p>Your job has been queued at the kiosk printing system.</p>
+          </div>
+
+          <div class="ticket-card">
+            <div class="ticket-header">
+              <span class="ticket-brand">INSTAPRINT STORE RECEIPT</span>
+              <span class="ticket-date" id="receipt-date">2026-07-10</span>
+            </div>
+            
+            <div class="ticket-token">
+              <div class="token-label">YOUR TOKEN NUMBER</div>
+              <div class="token-value" id="receipt-token">#---</div>
+            </div>
+
+            <div class="ticket-details">
+              <div class="ticket-detail-row">
+                <span>Job ID:</span>
+                <strong id="receipt-job-id">--</strong>
+              </div>
+              <div class="ticket-detail-row">
+                <span>Print Status:</span>
+                <span class="badge badge-pending" id="receipt-job-status">pending</span>
+              </div>
+              <div class="ticket-detail-row">
+                <span>Total A4 Sheets:</span>
+                <strong id="receipt-job-pages">0</strong>
+              </div>
+              <div class="ticket-detail-row">
+                <span>Copies:</span>
+                <strong id="receipt-job-copies">1</strong>
+              </div>
+              <div class="ticket-detail-row">
+                <span>Type:</span>
+                <strong id="receipt-job-type">B&W</strong>
+              </div>
+              <div class="ticket-detail-row">
+                <span>Estimated Wait (ETA):</span>
+                <strong id="receipt-job-eta">---</strong>
+              </div>
+            </div>
+
+            <div class="ticket-instructions">
+              <p>🔔 Please wait! Kiosk printer will print token <strong id="receipt-token-instruction">#---</strong>. The status updates in real-time above.</p>
+            </div>
+            
+            <div class="barcode-mock">
+              <div class="bar"></div><div class="bar wide"></div><div class="bar"></div><div class="bar thin"></div>
+              <div class="bar"></div><div class="bar wide"></div><div class="bar thin"></div><div class="bar"></div>
+              <div class="bar wide"></div><div class="bar"></div><div class="bar thin"></div><div class="bar"></div>
+            </div>
+          </div>
+
+          <div class="action-footer">
+            <button id="btn-restart" class="btn btn-secondary">Print Another File</button>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Lightbox Zoom Modal -->
+  <div id="preview-modal" class="modal">
+    <div class="modal-content">
+      <span class="modal-close" id="modal-close">&times;</span>
+      <div id="modal-body"></div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

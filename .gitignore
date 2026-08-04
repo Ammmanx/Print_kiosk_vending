@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+package-lock.json
+
+# Local configurations & credentials
+.env
+.env.*
+**/config.json
+**/serviceAccountKey*.json
+*serviceAccountKey*.json
+*.key
+*.pem
+*.p12
+*.cert
+
+# Build directories
+dist/
+dist-build/
+build/
+
+# Local prints, logs and uploads
+uploads/
+backend/uploads/
+agent/mock_prints/
+*.log
+tunnel_*.log
+
+# Large Binaries
+cloudflared.exe
+
+# OS generated files
+.DS_Store
+Thumbs.db

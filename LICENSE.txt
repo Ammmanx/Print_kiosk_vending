@@ -1,0 +1,14 @@
+INSTAPRINT KIOSK SOFTWARE LICENSE AGREEMENT
+
+Copyright (c) 2025 InstaPrint Technologies. All Rights Reserved.
+
+This software is provided for use by licensed shopkeepers only.
+Redistribution, modification, or resale is not permitted without
+explicit written consent from InstaPrint Technologies.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT.
+
+For support, contact: support@instaprint.in
