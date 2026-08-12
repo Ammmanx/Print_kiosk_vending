@@ -423,30 +423,530 @@
 <body>
 
   <!-- Login Gate Overlay HTML -->
-  <div id="login-overlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.65); backdrop-filter: blur(16px); z-index: 9999; display: flex; justify-content: center; align-items: center;">
-    <div style="background: #ffffff; padding: 32px; border-radius: 16px; max-width: 380px; width: 90%; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); border: 1px solid #e2e8f0; text-align: center;">
-      <h2 style="font-size: 1.45rem; font-weight: 800; color: #0f172a; margin-bottom: 6px;">👨‍💼 Shopkeeper Control</h2>
-      <p id="login-subtitle" style="font-size: 0.82rem; color: #64748b; margin-bottom: 24px;">Enter Shop ID and password to access the console</p>
-      
-      <form id="form-login" style="display: flex; flex-direction: column; gap: 16px; text-align: left;">
-        <div class="form-group" style="display: flex; flex-direction: column; gap: 6px;">
-          <label style="font-size: 0.8rem; font-weight: 700; color: #475569;">Shop ID</label>
-          <input type="text" id="login-username" required style="padding: 10px; border: 1.5px solid #cbd5e1; border-radius: 8px; font-family: inherit; font-size: 0.9rem;" placeholder="e.g. dynamic_shop_1">
-        </div>
-        
-        <div class="form-group" style="display: flex; flex-direction: column; gap: 6px;">
-          <label style="font-size: 0.8rem; font-weight: 700; color: #475569;">Password</label>
-          <input type="password" id="login-password" required style="padding: 10px; border: 1.5px solid #cbd5e1; border-radius: 8px; font-family: inherit; font-size: 0.9rem;" placeholder="Enter password">
-        </div>
-        
-        <button type="submit" class="btn" style="padding: 11px; font-weight: 700; border-radius: 8px; background: #3d5e35; color: white; border: none; cursor: pointer; font-size: 0.9rem; margin-top: 6px; width: 100%; transition: background 0.2s;">Unlock Console</button>
-      </form>
-      <div id="login-error" style="color: #dc2626; font-size: 0.78rem; font-weight: 600; margin-top: 12px; display: none;">❌ Incorrect username or password.</div>
+  <div id="login-overlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.65); backdrop-filter: blur(16px); z-index: 9999; display: flex; justify-content: center; align-items: center; padding: 16px; box-sizing: border-box;">
+    
+    <style>
+      #auth-card {
+        background: #ffffff;
+        border-radius: 20px;
+        width: 100%;
+        max-width: 800px;
+        min-height: 520px;
+        display: flex;
+        overflow: hidden;
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(0, 0, 0, 0.05);
+        font-family: 'Outfit', sans-serif;
+        position: relative;
+        transition: all 0.3s ease;
+      }
+      #auth-banner {
+        flex: 1;
+        background: linear-gradient(135deg, #3d5e35 0%, #22371e 100%);
+        padding: 40px;
+        color: #ffffff;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        position: relative;
+      }
+      #auth-banner::after {
+        content: '';
+        position: absolute;
+        top: 0; left: 0; width: 100%; height: 100%;
+        background: radial-gradient(circle at 10% 20%, rgba(255,255,255,0.08) 0%, transparent 60%);
+        pointer-events: none;
+      }
+      #auth-banner-logo {
+        font-size: 1.6rem;
+        font-weight: 800;
+        letter-spacing: -0.5px;
+      }
+      #auth-banner-logo span {
+        color: #a3e635; /* Lime green accent */
+      }
+      .feature-item {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 16px;
+        font-size: 0.9rem;
+        color: rgba(255, 255, 255, 0.9);
+      }
+      .feature-icon {
+        background: rgba(255, 255, 255, 0.15);
+        border-radius: 50%;
+        width: 24px;
+        height: 24px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.8rem;
+        flex-shrink: 0;
+      }
+      #auth-form-container {
+        width: 420px;
+        padding: 40px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        position: relative;
+        background: #ffffff;
+        flex-shrink: 0;
+      }
+      .auth-tabs {
+        display: flex;
+        border-bottom: 2px solid #e2e8f0;
+        margin-bottom: 24px;
+        position: relative;
+      }
+      .auth-tab {
+        flex: 1;
+        padding: 10px 0;
+        text-align: center;
+        background: none;
+        border: none;
+        font-family: inherit;
+        font-size: 1rem;
+        font-weight: 600;
+        color: #64748b;
+        cursor: pointer;
+        transition: all 0.25s ease;
+        position: relative;
+        outline: none;
+      }
+      .auth-tab.active {
+        color: #3d5e35;
+      }
+      .auth-tab-slider {
+        position: absolute;
+        bottom: -2px;
+        left: 0;
+        width: 50%;
+        height: 2px;
+        background: #3d5e35;
+        transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+      .auth-input-group {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        margin-bottom: 18px;
+        position: relative;
+      }
+      .auth-label {
+        font-size: 0.82rem;
+        font-weight: 600;
+        color: #475569;
+        display: flex;
+        justify-content: space-between;
+      }
+      .auth-input-wrapper {
+        position: relative;
+        display: flex;
+        align-items: center;
+      }
+      .auth-input {
+        width: 100%;
+        padding: 11px 40px 11px 12px;
+        border: 1.5px solid #cbd5e1;
+        border-radius: 8px;
+        font-family: inherit;
+        font-size: 0.9rem;
+        transition: all 0.2s ease;
+        outline: none;
+        color: #0f172a;
+      }
+      .auth-input:focus {
+        border-color: #3d5e35;
+        box-shadow: 0 0 0 3px rgba(61, 94, 53, 0.15);
+      }
+      .auth-input-icon {
+        position: absolute;
+        right: 12px;
+        font-size: 0.9rem;
+        color: #94a3b8;
+        pointer-events: none;
+        transition: color 0.2s;
+      }
+      .password-toggle-btn {
+        position: absolute;
+        right: 12px;
+        background: none;
+        border: none;
+        cursor: pointer;
+        padding: 4px;
+        color: #94a3b8;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        outline: none;
+        font-size: 1.1rem;
+        transition: color 0.2s;
+      }
+      .password-toggle-btn:hover {
+        color: #475569;
+      }
+      .auth-btn {
+        width: 100%;
+        padding: 12px;
+        background: #3d5e35;
+        color: #ffffff;
+        border: none;
+        border-radius: 8px;
+        font-family: inherit;
+        font-size: 0.95rem;
+        font-weight: 700;
+        cursor: pointer;
+        transition: background 0.2s;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        position: relative;
+        overflow: hidden;
+      }
+      .auth-btn:hover {
+        background: #2d4627;
+      }
+      .auth-btn:disabled {
+        background: #94a3b8;
+        cursor: not-allowed;
+      }
+      /* Password strength indicator styles */
+      #strength-meter-container {
+        margin-top: -10px;
+        margin-bottom: 16px;
+        display: none;
+      }
+      .strength-bar-bg {
+        height: 4px;
+        background: #e2e8f0;
+        border-radius: 2px;
+        overflow: hidden;
+        margin-bottom: 6px;
+      }
+      .strength-bar {
+        height: 100%;
+        width: 0;
+        transition: all 0.3s ease;
+        border-radius: 2px;
+      }
+      .strength-label {
+        font-size: 0.72rem;
+        font-weight: 500;
+        color: #64748b;
+      }
+      .requirements-list {
+        margin-top: 6px;
+        font-size: 0.72rem;
+        color: #64748b;
+        list-style: none;
+        padding-left: 0;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 4px;
+      }
+      .requirement-item {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+      }
+      .requirement-item.valid {
+        color: #16a34a;
+      }
+      .requirement-item.valid::before {
+        content: '✓ ';
+        font-weight: 700;
+      }
+      .requirement-item.invalid {
+        color: #94a3b8;
+      }
+      .requirement-item.invalid::before {
+        content: '• ';
+        font-size: 1.1rem;
+        margin-right: 2px;
+      }
+      /* Confirmation flow screen styles */
+      #confirmation-screen {
+        display: none;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        animation: fadeIn 0.3s ease-out;
+      }
+      #confirmation-shopid-box {
+        background: #f8fafc;
+        border: 1.5px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 12px 16px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        width: 100%;
+        margin: 14px 0;
+        box-sizing: border-box;
+      }
+      #confirmation-shopid {
+        font-size: 1.3rem;
+        font-weight: 800;
+        color: #0f172a;
+        letter-spacing: 0.5px;
+      }
+      .copy-btn {
+        background: #e2e8f0;
+        border: none;
+        padding: 6px 12px;
+        border-radius: 6px;
+        font-family: inherit;
+        font-size: 0.75rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+      .copy-btn:hover {
+        background: #cbd5e1;
+      }
+      #confirmation-qr {
+        width: 140px;
+        height: 140px;
+        border: 1px solid #cbd5e1;
+        border-radius: 10px;
+        margin-bottom: 12px;
+        padding: 4px;
+        background: #ffffff;
+      }
+      /* Loading Spinner */
+      .spinner {
+        width: 18px;
+        height: 18px;
+        border: 2px solid rgba(255,255,255,0.3);
+        border-radius: 50%;
+        border-top-color: white;
+        animation: spin 0.8s ease-in-out infinite;
+        display: none;
+      }
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+      @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      /* Responsive */
+      @media (max-width: 768px) {
+        #auth-card {
+          flex-direction: column;
+          max-width: 440px;
+          min-height: auto;
+        }
+        #auth-banner {
+          display: none;
+        }
+        #auth-form-container {
+          width: 100%;
+          padding: 30px 24px;
+        }
+      }
+    </style>
 
-      <div style="margin-top: 18px; font-size: 0.82rem; color: #64748b;">
-        <span id="login-toggle-text">New shopkeeper?</span>
-        <a href="#" id="login-toggle-link" style="color: #3d5e35; font-weight: 700; text-decoration: none; margin-left: 4px;">Register here</a>
+    <div id="auth-card">
+      <!-- Left side Banner -->
+      <div id="auth-banner">
+        <div>
+          <div id="auth-banner-logo">Insta<span>Print</span></div>
+          <p style="font-size: 0.85rem; color: rgba(255,255,255,0.7); margin-top: 4px;">Merchant Dashboard Console</p>
+        </div>
+        
+        <div style="margin: 40px 0;">
+          <h2 style="font-size: 1.4rem; font-weight: 700; margin-bottom: 20px; line-height: 1.3;">Powering your local print business</h2>
+          
+          <div class="feature-item">
+            <span class="feature-icon">✓</span>
+            <span>Fully automated online payment gateways</span>
+          </div>
+          <div class="feature-item">
+            <span class="feature-icon">✓</span>
+            <span>Real-time print job status monitors</span>
+          </div>
+          <div class="feature-item">
+            <span class="feature-icon">✓</span>
+            <span>Hardware configuration and limits control</span>
+          </div>
+        </div>
+
+        <div style="font-size: 0.72rem; color: rgba(255,255,255,0.5);">
+          © 2026 InstaPrint Systems. All rights reserved.
+        </div>
       </div>
+
+      <!-- Right side forms -->
+      <div id="auth-form-container">
+        
+        <!-- Standard Login / Register form block -->
+        <div id="auth-form-block">
+          <div class="auth-tabs">
+            <button class="auth-tab active" id="tab-login" type="button">Log In</button>
+            <button class="auth-tab" id="tab-register" type="button">Register</button>
+            <div class="auth-tab-slider" id="tab-slider"></div>
+          </div>
+
+          <form id="form-login-new" style="display: flex; flex-direction: column; gap: 4px;">
+            <!-- Register Specific: Shop Name -->
+            <div class="auth-input-group" id="group-shop-name" style="display: none;">
+              <label class="auth-label">Shop Name</label>
+              <div class="auth-input-wrapper">
+                <input type="text" id="input-shop-name" class="auth-input" placeholder="e.g. Aman Stationary">
+                <span class="auth-input-icon" id="validation-shop-name"></span>
+              </div>
+            </div>
+
+            <!-- Register Specific: Email -->
+            <div class="auth-input-group" id="group-shopkeeper-email" style="display: none;">
+              <label class="auth-label">Shopkeeper Gmail / Email</label>
+              <div class="auth-input-wrapper">
+                <input type="email" id="input-shopkeeper-email" class="auth-input" placeholder="e.g. shopkeeper@gmail.com">
+                <span class="auth-input-icon" id="validation-shopkeeper-email"></span>
+              </div>
+            </div>
+
+            <!-- Shop ID (Only for Log In) -->
+            <div class="auth-input-group" id="group-shop-id">
+              <label class="auth-label">Shop ID</label>
+              <div class="auth-input-wrapper">
+                <input type="text" id="input-shop-id" class="auth-input" placeholder="e.g. aman_shop">
+                <span class="auth-input-icon" id="validation-shop-id"></span>
+              </div>
+            </div>
+
+            <!-- Password -->
+            <div class="auth-input-group">
+              <label class="auth-label">Password</label>
+              <div class="auth-input-wrapper">
+                <input type="password" id="input-password" class="auth-input" placeholder="Enter password">
+                <button type="button" class="password-toggle-btn" id="btn-toggle-password" tabindex="-1" style="font-size:0.7rem;font-weight:700;color:#475569;letter-spacing:0;">Show</button>
+              </div>
+            </div>
+
+            <!-- Confirm Password (Only for Register) -->
+            <div class="auth-input-group" id="group-confirm-password" style="display: none;">
+              <label class="auth-label">Confirm Password</label>
+              <div class="auth-input-wrapper">
+                <input type="password" id="input-confirm-password" class="auth-input" placeholder="Re-enter password">
+                <button type="button" class="password-toggle-btn" id="btn-toggle-confirm-password" tabindex="-1" style="font-size:0.7rem;font-weight:700;color:#475569;letter-spacing:0;">Show</button>
+              </div>
+            </div>
+
+            <!-- Password Strength Bar (Register only) -->
+            <div id="strength-meter-container">
+              <div class="strength-bar-bg">
+                <div class="strength-bar" id="strength-bar"></div>
+              </div>
+              <div style="display: flex; justify-content: space-between;">
+                <span class="strength-label" id="strength-text">Password Strength</span>
+              </div>
+              <ul class="requirements-list">
+                <li class="requirement-item invalid" id="req-length">Min 8 characters</li>
+                <li class="requirement-item invalid" id="req-number">At least one number</li>
+                <li class="requirement-item invalid" id="req-letter">At least one letter</li>
+                <li class="requirement-item invalid" id="req-match">Passwords match</li>
+              </ul>
+            </div>
+
+            <!-- Reset password request (Only for Log In) -->
+            <div style="text-align: right; margin-bottom: 18px; margin-top: -4px;" id="forgot-password-container">
+              <a href="#" id="btn-forgot-password" style="color: #3d5e35; font-size: 0.8rem; font-weight: 600; text-decoration: none;">Forgot password?</a>
+            </div>
+
+            <!-- Error message area -->
+            <div id="auth-error-message" style="color: #dc2626; font-size: 0.78rem; font-weight: 600; margin-bottom: 14px; display: none;"></div>
+
+            <!-- Submit Button -->
+            <button type="submit" id="btn-auth-submit" class="auth-btn">
+              <span id="btn-auth-text">Unlock Console</span>
+              <div class="spinner" id="btn-auth-spinner"></div>
+            </button>
+          </form>
+        </div>
+
+        <!-- Post-Registration Confirmation Screen -->
+        <div id="confirmation-screen">
+          <div style="font-size: 2.5rem; margin-bottom: 8px;">🎉</div>
+          <h2 style="font-size: 1.35rem; font-weight: 800; color: #0f172a; margin-bottom: 4px;">Shop Registered Successfully!</h2>
+          <p style="font-size: 0.78rem; color: #64748b; margin-bottom: 12px; line-height: 1.4;">
+            Your credentials have been securely generated. Please save these details.
+          </p>
+
+          <div style="text-align: left; width: 100%; font-size: 0.8rem; font-weight: 600; color: #475569; margin-bottom: 4px;">Generated Shop ID:</div>
+          <div id="confirmation-shopid-box">
+            <span id="confirmation-shopid">aman_shop_4329</span>
+            <button class="copy-btn" id="btn-copy-shopid" type="button">Copy ID</button>
+          </div>
+          <p style="font-size: 0.7rem; color: #b45309; font-weight: 600; text-align: left; margin-bottom: 20px; display: flex; gap: 4px;">
+            ⚠️ Save this Shop ID — you'll need it to log in.
+          </p>
+
+          <!-- Hidden QR elements kept for JS compatibility, not displayed -->
+          <img id="confirmation-qr" src="" alt="Storefront QR Code" style="display: none;">
+          <button class="copy-btn" id="btn-download-qr" type="button" style="display: none;"></button>
+          <button class="copy-btn" id="btn-copy-url" type="button" style="display: none;"></button>
+
+          <p style="font-size: 0.78rem; color: #64748b; margin-bottom: 20px; line-height: 1.5; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 10px; padding: 12px; text-align: left;">
+            ✅ Your customer QR code has been generated and is available in your dashboard under <strong>📲 Customer Portal QR</strong>.
+          </p>
+
+          <button id="btn-confirm-continue" class="auth-btn" type="button">Continue to Dashboard</button>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- Dedicated Shop QR Modal Overlay -->
+  <div id="qr-view-overlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px); z-index: 9995; display: none; align-items: center; justify-content: center; padding: 16px; box-sizing: border-box;">
+    <div style="background: #ffffff; padding: 30px; border-radius: 16px; max-width: 380px; width: 100%; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); border: 1px solid #e2e8f0; text-align: center; font-family: 'Outfit', sans-serif; position: relative;">
+      
+      <button id="btn-close-qr-view" style="position: absolute; top: 16px; right: 16px; background: none; border: none; font-size: 1.1rem; color: #94a3b8; cursor: pointer; transition: color 0.2s; outline: none;">&#x2715;</button>
+      
+      <div style="font-size: 2.2rem; margin-bottom: 10px;">🖨️</div>
+      <h3 style="font-size: 1.25rem; font-weight: 800; color: #0f172a; margin-bottom: 4px;">Your Kiosk QR Code</h3>
+      <p style="font-size: 0.78rem; color: #64748b; margin-bottom: 18px;">Display this QR code for customers to scan and pay.</p>
+      
+      <img id="qr-view-image" src="" alt="Storefront QR Code" style="width: 180px; height: 180px; border: 1px solid #cbd5e1; border-radius: 10px; padding: 6px; background: #ffffff; margin-bottom: 16px;">
+      
+      <div style="background: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: 8px; padding: 8px 12px; font-size: 0.8rem; font-weight: 600; color: #0f172a; margin-bottom: 18px; word-break: break-all; text-align: left; box-sizing: border-box;">
+        <span style="color: #64748b; font-weight: 500; font-size: 0.72rem; display: block; margin-bottom: 2px;">Storefront URL:</span>
+        <span id="qr-view-url"></span>
+      </div>
+      
+      <div style="display: flex; gap: 10px; width: 100%; box-sizing: border-box;">
+        <button class="copy-btn" id="btn-download-qr-view" type="button" style="flex: 1; padding: 10px; background: #f1f5f9; border: 1.5px solid #cbd5e1;">Download QR</button>
+        <button class="copy-btn" id="btn-copy-url-view" type="button" style="flex: 1; padding: 10px; background: #f1f5f9; border: 1.5px solid #cbd5e1;">Copy Link</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Forgot Password Request Modal Overlay -->
+  <div id="forgot-password-overlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px); z-index: 9995; display: none; align-items: center; justify-content: center; padding: 16px; box-sizing: border-box;">
+    <div style="background: #ffffff; padding: 30px; border-radius: 16px; max-width: 380px; width: 100%; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); border: 1px solid #e2e8f0; text-align: left; font-family: 'Outfit', sans-serif; position: relative;">
+      
+      <button id="btn-close-forgot" style="position: absolute; top: 16px; right: 16px; background: none; border: none; font-size: 1.1rem; color: #94a3b8; cursor: pointer; transition: color 0.2s; outline: none;">&#x2715;</button>
+      
+      <h3 style="font-size: 1.25rem; font-weight: 800; color: #0f172a; margin-bottom: 6px;">Reset Password</h3>
+      <p style="font-size: 0.78rem; color: #64748b; margin-bottom: 20px; line-height: 1.4;">Enter your Shop ID below. We will generate a short-lived reset link for your account verification.</p>
+      
+      <form id="form-forgot-password" style="display: flex; flex-direction: column; gap: 14px;">
+        <div class="auth-input-group" style="margin-bottom: 6px;">
+          <label class="auth-label">Shop ID</label>
+          <input type="text" id="input-forgot-shopid" required class="auth-input" style="padding: 10px 12px;" placeholder="e.g. aman_shop">
+        </div>
+        
+        <div id="forgot-message" style="font-size: 0.78rem; font-weight: 600; display: none; margin-bottom: 6px;"></div>
+        
+        <button type="submit" id="btn-forgot-submit" class="auth-btn">
+          <span id="btn-forgot-text">Request Reset Link</span>
+          <div class="spinner" id="btn-forgot-spinner"></div>
+        </button>
+      </form>
     </div>
   </div>
 
@@ -542,6 +1042,7 @@
       </div>
       <div class="header-actions">
         <button class="btn-toggle-preview" id="btn-toggle-preview">🖥️ Toggle Print Previews</button>
+        <button id="btn-view-qr" style="border: 1.5px solid var(--primary-color); background: transparent; color: var(--primary-color); font-family: inherit; font-size: 0.8rem; font-weight: 700; padding: 6px 14px; border-radius: 50px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 4px;">🖼️ View Store QR</button>
         <button id="btn-logout" style="border: 1.5px solid var(--danger-color); background: transparent; color: var(--danger-color); font-family: inherit; font-size: 0.8rem; font-weight: 700; padding: 6px 14px; border-radius: 50px; cursor: pointer; transition: all 0.2s;">Logout</button>
         <div class="status-badge" id="status-badge-shop">Shop ID: default_shop</div>
       </div>
@@ -614,6 +1115,29 @@
               <div class="metric-box">
                 <div class="metric-label">Completed Jobs</div>
                 <div class="metric-value" id="completed-jobs-val">0</div>
+              </div>
+            </div>
+          </section>
+
+          <!-- CARD 3B: ANALYTICS & INSIGHTS -->
+          <section class="card">
+            <h2>📊 Kiosk Analytics & Insights</h2>
+            <div class="analytics-metrics" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 15px;">
+              <div class="metric-box" style="padding: 12px; background: #f8fafc; border-radius: 8px; border: 1.5px solid var(--border-color);">
+                <div class="metric-label" style="font-size: 0.72rem; color: var(--text-muted); font-weight: 500;">Average Pages/Job</div>
+                <div class="metric-value" id="analytics-avg-pages" style="font-size: 1.2rem; font-weight: 800; color: var(--text-main); margin-top: 4px;">0</div>
+              </div>
+              <div class="metric-box" style="padding: 12px; background: #f8fafc; border-radius: 8px; border: 1.5px solid var(--border-color);">
+                <div class="metric-label" style="font-size: 0.72rem; color: var(--text-muted); font-weight: 500;">B&W / Color Ratio</div>
+                <div class="metric-value" id="analytics-ratio" style="font-size: 1.2rem; font-weight: 800; color: var(--text-main); margin-top: 4px;">0 / 0</div>
+              </div>
+              <div class="metric-box" style="padding: 12px; background: #f8fafc; border-radius: 8px; border: 1.5px solid var(--border-color);">
+                <div class="metric-label" style="font-size: 0.72rem; color: var(--text-muted); font-weight: 500;">Popular Paper Size</div>
+                <div class="metric-value" id="analytics-paper" style="font-size: 1.2rem; font-weight: 800; color: var(--text-main); margin-top: 4px;">A4</div>
+              </div>
+              <div class="metric-box" style="padding: 12px; background: #f8fafc; border-radius: 8px; border: 1.5px solid var(--border-color);">
+                <div class="metric-label" style="font-size: 0.72rem; color: var(--text-muted); font-weight: 500;">Peak Hour of Day</div>
+                <div class="metric-value" id="analytics-peak" style="font-size: 1.2rem; font-weight: 800; color: var(--text-main); margin-top: 4px;">N/A</div>
               </div>
             </div>
           </section>
@@ -755,6 +1279,9 @@
         const response = await fetch('/api/config');
         const config = await response.json();
 
+        currentFrontendUrl = config.frontendUrl || '';
+        currentQrCode = config.qrCode || '';
+
         // Check if prices are configured (not null/empty)
         const priceOverlay = document.getElementById('price-setup-overlay');
         if (config.bwPrice === null || config.colorPrice === null || config.bwPrice === undefined || config.colorPrice === undefined) {
@@ -766,6 +1293,40 @@
         // Update Finance
         document.getElementById('revenue-val').innerText = `₹${(config.revenue || 0).toFixed(2)}`;
         document.getElementById('completed-jobs-val').innerText = config.ordersCount || 0;
+
+        // Fetch and populate Analytics
+        try {
+          const analyticsResponse = await fetch('/api/analytics');
+          const analytics = await analyticsResponse.json();
+          
+          document.getElementById('analytics-avg-pages').innerText = analytics.averageSheets || 0;
+          document.getElementById('analytics-ratio').innerText = `${analytics.ratios.bw} / ${analytics.ratios.color}`;
+          
+          let popularPaper = 'N/A';
+          let maxCount = 0;
+          for (const [size, count] of Object.entries(analytics.paperSizes || {})) {
+            if (count > maxCount) {
+              maxCount = count;
+              popularPaper = size;
+            }
+          }
+          document.getElementById('analytics-paper').innerText = popularPaper;
+
+          let peakHour = 'N/A';
+          let maxHourCount = 0;
+          for (let h = 0; h < 24; h++) {
+            const count = analytics.hourlyDistribution[h] || 0;
+            if (count > maxHourCount) {
+              maxHourCount = count;
+              const ampm = h >= 12 ? 'PM' : 'AM';
+              const displayHour = h % 12 === 0 ? 12 : h % 12;
+              peakHour = `${displayHour} ${ampm}`;
+            }
+          }
+          document.getElementById('analytics-peak').innerText = peakHour;
+        } catch (analyticsErr) {
+          console.warn('Failed to load analytics details:', analyticsErr.message);
+        }
 
         // Set form prices and configurations (only if not focused to avoid cursor resetting)
         const activeEl = document.activeElement;
@@ -1035,76 +1596,438 @@
       }
     }
 
+    // Global references for storefront URL and QR Code
+    let currentFrontendUrl = '';
+    let currentQrCode = '';
+
     // Check Authentication Gate
     function checkAuthentication() {
       const auth = localStorage.getItem('dashboard_authenticated');
       const overlay = document.getElementById('login-overlay');
+      const shopBadge = document.getElementById('status-badge-shop');
+      const shopId = localStorage.getItem('dashboard_shop_id') || 'default_shop';
+
       if (auth === 'true') {
         overlay.style.display = 'none';
+        if (shopBadge) {
+          shopBadge.innerText = `Shop ID: ${shopId}`;
+        }
       } else {
         overlay.style.display = 'flex';
       }
     }
 
+    // Live API mode — set to true only for static UI previews without a backend
+    const useMockFlow = false;
+
+    // Tab switching controls
     let authAction = 'login'; // 'login' or 'register'
+    const tabLogin = document.getElementById('tab-login');
+    const tabRegister = document.getElementById('tab-register');
+    const tabSlider = document.getElementById('tab-slider');
+    const formLogin = document.getElementById('form-login-new');
+    const btnAuthText = document.getElementById('btn-auth-text');
+    const btnAuthSpinner = document.getElementById('btn-auth-spinner');
+    const authErrorMsg = document.getElementById('auth-error-message');
 
-    const toggleLink = document.getElementById('login-toggle-link');
-    const toggleText = document.getElementById('login-toggle-text');
-    const loginTitle = document.querySelector('#login-overlay h2');
-    const loginSubtitle = document.getElementById('login-subtitle');
-    const loginSubmitBtn = document.querySelector('#form-login button[type="submit"]');
+    // Input Group rows
+    const groupShopName = document.getElementById('group-shop-name');
+    const groupShopkeeperEmail = document.getElementById('group-shopkeeper-email');
+    const groupShopId = document.getElementById('group-shop-id');
+    const groupConfirmPassword = document.getElementById('group-confirm-password');
+    const strengthMeterContainer = document.getElementById('strength-meter-container');
+    const forgotPasswordContainer = document.getElementById('forgot-password-container');
 
-    toggleLink.addEventListener('click', (e) => {
-      e.preventDefault();
-      if (authAction === 'login') {
-        authAction = 'register';
-        loginTitle.innerHTML = '📝 Register New Shop';
-        loginSubtitle.textContent = 'Choose a new Shop ID and Password to register';
-        loginSubmitBtn.textContent = 'Register & Open Console';
-        toggleText.textContent = 'Already have a shop?';
-        toggleLink.textContent = 'Login here';
+    // Inputs
+    const inputShopName = document.getElementById('input-shop-name');
+    const inputShopkeeperEmail = document.getElementById('input-shopkeeper-email');
+    const inputShopId = document.getElementById('input-shop-id');
+    const inputPassword = document.getElementById('input-password');
+    const inputConfirmPassword = document.getElementById('input-confirm-password');
+
+    function switchTab(action) {
+      authAction = action;
+      authErrorMsg.style.display = 'none';
+      
+      if (action === 'register') {
+        tabLogin.classList.remove('active');
+        tabRegister.classList.add('active');
+        tabSlider.style.transform = 'translateX(100%)';
+        
+        groupShopName.style.display = 'flex';
+        groupShopkeeperEmail.style.display = 'flex';
+        groupShopId.style.display = 'none';
+        groupConfirmPassword.style.display = 'flex';
+        strengthMeterContainer.style.display = 'block';
+        forgotPasswordContainer.style.display = 'none';
+        btnAuthText.innerText = 'Register & Open Console';
+        
+        // Make Register specific inputs required
+        inputShopName.required = true;
+        inputShopkeeperEmail.required = true;
+        inputConfirmPassword.required = true;
+        inputShopId.required = false;
       } else {
-        authAction = 'login';
-        loginTitle.innerHTML = '👨‍💼 Shopkeeper Control';
-        loginSubtitle.textContent = 'Enter Shop ID and password to access the console';
-        loginSubmitBtn.textContent = 'Unlock Console';
-        toggleText.textContent = 'New shopkeeper?';
-        toggleLink.textContent = 'Register here';
+        tabLogin.classList.add('active');
+        tabRegister.classList.remove('active');
+        tabSlider.style.transform = 'translateX(0)';
+        
+        groupShopName.style.display = 'none';
+        groupShopkeeperEmail.style.display = 'none';
+        groupShopId.style.display = 'flex';
+        groupConfirmPassword.style.display = 'none';
+        strengthMeterContainer.style.display = 'none';
+        forgotPasswordContainer.style.display = 'block';
+        btnAuthText.innerText = 'Unlock Console';
+        
+        // Reset Register inputs required
+        inputShopName.required = false;
+        inputShopkeeperEmail.required = false;
+        inputConfirmPassword.required = false;
+        inputShopId.required = true;
       }
-      document.getElementById('login-error').style.display = 'none';
-    });
+    }
 
-    document.getElementById('form-login').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const shopId = document.getElementById('login-username').value;
-      const pass = document.getElementById('login-password').value;
-      const errorEl = document.getElementById('login-error');
+    tabLogin.addEventListener('click', () => switchTab('login'));
+    tabRegister.addEventListener('click', () => switchTab('register'));
 
-      try {
-        const response = await fetch('/api/login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ shopId, password: pass, action: authAction })
+    // Toggle password show/hide buttons
+    function setupPasswordToggle(inputId, toggleBtnId) {
+      const input = document.getElementById(inputId);
+      const btn = document.getElementById(toggleBtnId);
+      if (input && btn) {
+        btn.addEventListener('click', () => {
+          if (input.type === 'password') {
+            input.type = 'text';
+            btn.innerText = 'Hide';
+          } else {
+            input.type = 'password';
+            btn.innerText = 'Show';
+          }
         });
-        const result = await response.json();
-        if (result.success) {
-          localStorage.setItem('dashboard_authenticated', 'true');
-          localStorage.setItem('dashboard_shop_id', result.shopId);
-          if (result.token) localStorage.setItem('dashboard_token', result.token);
-          
-          document.getElementById('login-overlay').style.display = 'none';
-          errorEl.style.display = 'none';
-          loadDashboardData();
+      }
+    }
+    setupPasswordToggle('input-password', 'btn-toggle-password');
+    setupPasswordToggle('input-confirm-password', 'btn-toggle-confirm-password');
+
+    // Password strength rules validation
+    function validatePasswordStrength() {
+      const val = inputPassword.value;
+      const confirmVal = inputConfirmPassword.value;
+      
+      const hasLength = val.length >= 8;
+      const hasNumber = /\d/.test(val);
+      const hasLetter = /[a-zA-Z]/.test(val);
+      const isMatch = val === confirmVal && val.length > 0;
+
+      // Update checklists UI
+      updateRuleState('req-length', hasLength);
+      updateRuleState('req-number', hasNumber);
+      updateRuleState('req-letter', hasLetter);
+      updateRuleState('req-match', isMatch);
+
+      // Compute score
+      let score = 0;
+      if (hasLength) score++;
+      if (hasNumber) score++;
+      if (hasLetter) score++;
+      
+      const bar = document.getElementById('strength-bar');
+      const text = document.getElementById('strength-text');
+      
+      // Update meter UI
+      if (val.length === 0) {
+        bar.style.width = '0%';
+        bar.style.background = '#e2e8f0';
+        text.innerText = 'Password Strength';
+        text.style.color = '#64748b';
+      } else if (score <= 1) {
+        bar.style.width = '33%';
+        bar.style.background = '#dc2626'; // Red
+        text.innerText = 'Strength: Weak';
+        text.style.color = '#dc2626';
+      } else if (score === 2) {
+        bar.style.width = '66%';
+        bar.style.background = '#d97706'; // Orange
+        text.innerText = 'Strength: Medium';
+        text.style.color = '#d97706';
+      } else {
+        bar.style.width = '100%';
+        bar.style.background = '#16a34a'; // Green
+        text.innerText = 'Strength: Strong';
+        text.style.color = '#16a34a';
+      }
+
+      return hasLength && hasNumber && hasLetter && isMatch;
+    }
+
+    function updateRuleState(elementId, isValid) {
+      const el = document.getElementById(elementId);
+      if (el) {
+        if (isValid) {
+          el.classList.remove('invalid');
+          el.classList.add('valid');
         } else {
-          errorEl.textContent = '❌ ' + (result.error || 'Login failed.');
-          errorEl.style.display = 'block';
+          el.classList.remove('valid');
+          el.classList.add('invalid');
         }
-      } catch (err) {
-        errorEl.textContent = '❌ Failed to connect to local print agent.';
-        errorEl.style.display = 'block';
+      }
+    }
+
+    inputPassword.addEventListener('input', validatePasswordStrength);
+    inputConfirmPassword.addEventListener('input', validatePasswordStrength);
+
+    // Form Submission
+    formLogin.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      authErrorMsg.style.display = 'none';
+
+      // Validation check for register
+      if (authAction === 'register') {
+        const isStrong = validatePasswordStrength();
+        if (!isStrong) {
+          authErrorMsg.innerText = '❌ Please satisfy all password validation requirements.';
+          authErrorMsg.style.display = 'block';
+          return;
+        }
+      }
+
+      // Show spinner, disable submit button
+      btnAuthSpinner.style.display = 'inline-block';
+      const submitBtn = document.getElementById('btn-auth-submit');
+      submitBtn.disabled = true;
+
+      const shopName = inputShopName.value;
+      const email = inputShopkeeperEmail.value;
+      const shopId = inputShopId.value;
+      const password = inputPassword.value;
+
+      if (useMockFlow) {
+        // Simulate API network latency for Phase 1 preview
+        setTimeout(() => {
+          btnAuthSpinner.style.display = 'none';
+          submitBtn.disabled = false;
+
+          if (authAction === 'register') {
+            // Setup mock register response
+            const mockShopId = 'shop_mock_' + Math.floor(Math.random() * 9000 + 1000);
+            const dummyFrontendUrl = window.location.origin + '/?shop=' + mockShopId;
+            const dummyQrCode = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(dummyFrontendUrl)}`;
+
+            // Populate confirmation screen
+            document.getElementById('confirmation-shopid').innerText = mockShopId;
+            document.getElementById('confirmation-qr').src = dummyQrCode;
+            
+            // Re-bind continue and download buttons for mock variables
+            document.getElementById('btn-copy-shopid').onclick = (ev) => {
+              copyTextToClipboard(mockShopId, ev.target);
+            };
+            document.getElementById('btn-copy-url').onclick = (ev) => {
+              copyTextToClipboard(dummyFrontendUrl, ev.target);
+            };
+            document.getElementById('btn-download-qr').onclick = () => {
+              downloadImage(dummyQrCode, `qr_${mockShopId}.png`);
+            };
+            document.getElementById('btn-confirm-continue').onclick = () => {
+              localStorage.setItem('dashboard_authenticated', 'true');
+              localStorage.setItem('dashboard_shop_id', mockShopId);
+              document.getElementById('login-overlay').style.display = 'none';
+              checkAuthentication();
+              loadDashboardData();
+            };
+
+            // Switch to confirmation display
+            document.getElementById('auth-form-block').style.display = 'none';
+            document.getElementById('confirmation-screen').style.display = 'flex';
+          } else {
+            // Mock Login Success
+            localStorage.setItem('dashboard_authenticated', 'true');
+            localStorage.setItem('dashboard_shop_id', shopId);
+            document.getElementById('login-overlay').style.display = 'none';
+            checkAuthentication();
+            loadDashboardData();
+          }
+        }, 1500);
+      } else {
+        // Real API implementation (Phase 2 wiring)
+        try {
+          const endpoint = authAction === 'register' ? '/api/register' : '/api/login';
+          const payload = authAction === 'register' 
+            ? { shopName, email, password }
+            : { shopId, password };
+            
+          const response = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+          const result = await response.json();
+          
+          btnAuthSpinner.style.display = 'none';
+          submitBtn.disabled = false;
+
+          if (result.success) {
+            if (authAction === 'register') {
+              // Show confirmation screen
+              document.getElementById('confirmation-shopid').innerText = result.shopId;
+              document.getElementById('confirmation-qr').src = result.qrCode;
+              
+              document.getElementById('btn-copy-shopid').onclick = (ev) => {
+                copyTextToClipboard(result.shopId, ev.target);
+              };
+              document.getElementById('btn-copy-url').onclick = (ev) => {
+                const storefrontUrl = result.storefrontUrl || (window.location.origin + '/?shop=' + result.shopId);
+                copyTextToClipboard(storefrontUrl, ev.target);
+              };
+              document.getElementById('btn-download-qr').onclick = () => {
+                downloadImage(result.qrCode, `qr_${result.shopId}.png`);
+              };
+              document.getElementById('btn-confirm-continue').onclick = () => {
+                localStorage.setItem('dashboard_authenticated', 'true');
+                localStorage.setItem('dashboard_shop_id', result.shopId);
+                if (result.token) localStorage.setItem('dashboard_token', result.token);
+                document.getElementById('login-overlay').style.display = 'none';
+                checkAuthentication();
+                loadDashboardData();
+              };
+
+              document.getElementById('auth-form-block').style.display = 'none';
+              document.getElementById('confirmation-screen').style.display = 'flex';
+            } else {
+              localStorage.setItem('dashboard_authenticated', 'true');
+              localStorage.setItem('dashboard_shop_id', result.shopId);
+              if (result.token) localStorage.setItem('dashboard_token', result.token);
+              document.getElementById('login-overlay').style.display = 'none';
+              checkAuthentication();
+              loadDashboardData();
+            }
+          } else {
+            authErrorMsg.innerText = '❌ ' + (result.error || 'Authentication failed.');
+            authErrorMsg.style.display = 'block';
+          }
+        } catch (err) {
+          btnAuthSpinner.style.display = 'none';
+          submitBtn.disabled = false;
+          authErrorMsg.innerText = '❌ Failed to connect to backend server.';
+          authErrorMsg.style.display = 'block';
+        }
       }
     });
 
+    // Helper functions for clipboard copy and image downloads
+    function copyTextToClipboard(text, btnElement, successText = 'Copied!') {
+      const originalText = btnElement.innerText;
+      navigator.clipboard.writeText(text).then(() => {
+        btnElement.innerText = successText;
+        btnElement.style.background = '#16a34a';
+        btnElement.style.color = '#ffffff';
+        setTimeout(() => {
+          btnElement.innerText = originalText;
+          btnElement.style.background = '';
+          btnElement.style.color = '';
+        }, 2000);
+      }).catch(err => {
+        console.error('Could not copy text: ', err);
+      });
+    }
+
+    function downloadImage(url, filename) {
+      if (url.startsWith('data:')) {
+        // Download base64 directly
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      } else {
+        // Download by fetching blob
+        fetch(url)
+          .then(response => response.blob())
+          .then(blob => {
+            const blobURL = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = blobURL;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(blobURL);
+          })
+          .catch(err => {
+            console.error('Failed to download image:', err);
+            window.open(url, '_blank');
+          });
+      }
+    }
+
+    // View Shop Storefront QR Overlay
+    const qrOverlay = document.getElementById('qr-view-overlay');
+    const qrImage = document.getElementById('qr-view-image');
+    const qrUrlSpan = document.getElementById('qr-view-url');
+
+    document.getElementById('btn-view-qr').addEventListener('click', () => {
+      const shopId = localStorage.getItem('dashboard_shop_id') || 'default_shop';
+      const resolvedUrl = currentFrontendUrl || (window.location.origin + '/?shop=' + shopId);
+      const resolvedQr = currentQrCode || `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(resolvedUrl)}`;
+
+      qrImage.src = resolvedQr;
+      qrUrlSpan.innerText = resolvedUrl;
+
+      document.getElementById('btn-copy-url-view').onclick = (ev) => {
+        copyTextToClipboard(resolvedUrl, ev.target);
+      };
+      document.getElementById('btn-download-qr-view').onclick = () => {
+        downloadImage(resolvedQr, `qr_${shopId}.png`);
+      };
+
+      qrOverlay.style.display = 'flex';
+    });
+
+    document.getElementById('btn-close-qr-view').addEventListener('click', () => {
+      qrOverlay.style.display = 'none';
+    });
+
+    // Forgot Password Request Overlay
+    const forgotOverlay = document.getElementById('forgot-password-overlay');
+    const forgotMsg = document.getElementById('forgot-message');
+    const forgotSubmitBtn = document.getElementById('btn-forgot-submit');
+    const forgotSpinner = document.getElementById('btn-forgot-spinner');
+    const forgotText = document.getElementById('btn-forgot-text');
+
+    document.getElementById('btn-forgot-password').addEventListener('click', (e) => {
+      e.preventDefault();
+      forgotMsg.style.display = 'none';
+      document.getElementById('input-forgot-shopid').value = '';
+      forgotOverlay.style.display = 'flex';
+    });
+
+    document.getElementById('btn-close-forgot').addEventListener('click', () => {
+      forgotOverlay.style.display = 'none';
+    });
+
+    document.getElementById('form-forgot-password').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const shopId = document.getElementById('input-forgot-shopid').value;
+      
+      forgotSpinner.style.display = 'inline-block';
+      forgotSubmitBtn.disabled = true;
+
+      setTimeout(() => {
+        forgotSpinner.style.display = 'none';
+        forgotSubmitBtn.disabled = false;
+        
+        forgotMsg.innerText = '✉️ Reset link requested! If this Shop ID exists, a link will be sent to the registered address.';
+        forgotMsg.style.color = '#16a34a';
+        forgotMsg.style.display = 'block';
+        
+        setTimeout(() => {
+          forgotOverlay.style.display = 'none';
+        }, 3000);
+      }, 1500);
+    });
+
+    // Logout
     document.getElementById('btn-logout').addEventListener('click', () => {
       localStorage.removeItem('dashboard_authenticated');
       localStorage.removeItem('dashboard_shop_id');
@@ -1207,7 +2130,10 @@
       try {
         const response = await fetch('/api/settings', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + (localStorage.getItem('dashboard_token') || '')
+          },
           body: JSON.stringify({ bwPrice, colorPrice, printers: activePrinters })
         });
         const res = await response.json();
@@ -1266,7 +2192,10 @@
       try {
         const response = await fetch('/api/settings', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + (localStorage.getItem('dashboard_token') || '')
+          },
           body: JSON.stringify({ bwPrice, colorPrice, printers: activePrinters })
         });
         const res = await response.json();
@@ -1293,7 +2222,10 @@
       try {
         const response = await fetch('/api/settings', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + (localStorage.getItem('dashboard_token') || '')
+          },
           body: JSON.stringify({ bwPrice, colorPrice, upiId })
         });
         const res = await response.json();
@@ -1330,7 +2262,10 @@
       try {
         const response = await fetch('/api/settings', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + (localStorage.getItem('dashboard_token') || '')
+          },
           body: JSON.stringify({ bwPrice, colorPrice, printers: defaultPrinterSetup })
         });
         const res = await response.json();

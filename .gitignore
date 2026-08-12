@@ -27,6 +27,8 @@ tunnel_*.log
 
 # Large Binaries
 cloudflared.exe
+InstaPrint-Agent-Distribution/
+*.exe
 
 # OS generated files
 .DS_Store

@@ -1,6 +1,13 @@
-const { spawn, execSync } = require('child_process');
+const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+
+// Load environment variables from root .env if it exists
+try {
+  require('dotenv').config();
+} catch (e) {
+  // Silent catch if dotenv isn't present in the environment
+}
 
 console.log('=========================================');
 console.log(' Starting InstaPrint Self-Service Kiosk...');
@@ -8,9 +15,34 @@ console.log('=========================================');
 
 const cloudflaredPath = path.join(__dirname, 'cloudflared.exe');
 
-function startTunnel(port) {
+function getTunnel(name, port, tokenEnv, fixedUrlEnv) {
+  const token = process.env[tokenEnv];
+  const fixedUrl = process.env[fixedUrlEnv];
+
+  if (fixedUrl) {
+    if (token) {
+      console.log(`Starting Cloudflare Named Tunnel for ${name} (port ${port}) using token...`);
+      const tunnelProcess = spawn(cloudflaredPath, ['tunnel', 'run', '--token', token]);
+      
+      const logStream = fs.createWriteStream(path.join(__dirname, `tunnel_${name.toLowerCase()}_token.log`));
+      tunnelProcess.stdout.pipe(logStream);
+      tunnelProcess.stderr.pipe(logStream);
+
+      console.log(`[OK] ${name} Named Tunnel started. Assuming public URL: ${fixedUrl}`);
+      return Promise.resolve({ url: fixedUrl, process: tunnelProcess });
+    } else {
+      console.log(`Using fixed URL for ${name}: ${fixedUrl}`);
+      return Promise.resolve({ url: fixedUrl, process: null });
+    }
+  }
+
+  if (token) {
+    console.warn(`[WARNING] Cloudflare token specified for ${name} (${tokenEnv}) but fixed URL (${fixedUrlEnv}) is not defined in .env.`);
+    console.warn(`Falling back to Quick Tunnel for ${name}.`);
+  }
+
   return new Promise((resolve, reject) => {
-    console.log(`Starting Cloudflare tunnel for port ${port}...`);
+    console.log(`Starting Cloudflare Quick Tunnel for ${name} (port ${port})...`);
     const tunnel = spawn(cloudflaredPath, ['tunnel', '--url', `http://localhost:${port}`]);
     let urlFound = false;
 
@@ -38,51 +70,67 @@ function startTunnel(port) {
     setTimeout(checkLogs, 1000);
 
     tunnel.on('error', (err) => {
-      console.error(`Failed to start tunnel on port ${port}:`, err);
+      console.error(`Failed to start quick tunnel on port ${port}:`, err);
       reject(err);
     });
   });
 }
 
+function updateEnvFile(filePath, updates) {
+  let content = '';
+  if (fs.existsSync(filePath)) {
+    content = fs.readFileSync(filePath, 'utf8');
+  }
+
+  let lines = content.split('\n');
+  for (const [key, val] of Object.entries(updates)) {
+    let found = false;
+    for (let i = 0; i < lines.length; i++) {
+      if (lines[i].trim().startsWith(`${key}=`)) {
+        lines[i] = `${key}=${val}`;
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+      lines.push(`${key}=${val}`);
+    }
+  }
+
+  fs.writeFileSync(filePath, lines.join('\n'), 'utf8');
+}
+
 async function main() {
   try {
     // 1. Start tunnels
-    const backendTunnel = await startTunnel(5002);
-    const frontendTunnel = await startTunnel(8080);
+    const backendTunnel = await getTunnel('Backend', 5002, 'CLOUDFLARE_BACKEND_TUNNEL_TOKEN', 'FIXED_BACKEND_URL');
+    const frontendTunnel = await getTunnel('Frontend', 8080, 'CLOUDFLARE_FRONTEND_TUNNEL_TOKEN', 'FIXED_FRONTEND_URL');
 
     // 2. Update frontend/app.js
     console.log('Updating frontend configurations...');
     const appJsPath = path.join(__dirname, 'frontend', 'app.js');
     let appJsContent = fs.readFileSync(appJsPath, 'utf8');
     appJsContent = appJsContent.replace(
-      /const API_BASE_URL = 'https:\/\/[a-z0-9-]+\.trycloudflare\.com';/,
+      /const API_BASE_URL = '[^']+';/,
       `const API_BASE_URL = '${backendTunnel.url}';`
     );
     fs.writeFileSync(appJsPath, appJsContent, 'utf8');
     console.log('[OK] frontend/app.js updated.');
 
-    // 3. Update agent/.env and backend/.env
+    // 3. Update agent/.env and backend/.env without wiping other variables
     console.log('Updating agent environment settings...');
     const agentEnvPath = path.join(__dirname, 'agent', '.env');
-    let envContent = `FIREBASE_DATABASE_URL=https://your-project-id-default-rtdb.firebaseio.com
-FIREBASE_SERVICE_ACCOUNT_PATH=./serviceAccountKey.json
-
-BACKEND_API_URL=${backendTunnel.url}
-PUBLIC_FRONTEND_URL=${frontendTunnel.url}
-MOCK_PRINT_TO_FILE=true
-`;
-    fs.writeFileSync(agentEnvPath, envContent, 'utf8');
+    updateEnvFile(agentEnvPath, {
+      BACKEND_API_URL: 'http://localhost:5002',
+      PUBLIC_FRONTEND_URL: frontendTunnel.url
+    });
     console.log('[OK] agent/.env updated.');
 
     console.log('Updating backend environment settings...');
     const backendEnvPath = path.join(__dirname, 'backend', '.env');
-    let backendEnvContent = `PORT=5002
-FIREBASE_DATABASE_URL=https://your-project-id-default-rtdb.firebaseio.com
-RAZORPAY_WEBHOOK_SECRET=your_razorpay_webhook_secret_here
-FIREBASE_SERVICE_ACCOUNT_PATH=./serviceAccountKey.json
-PUBLIC_FRONTEND_URL=${frontendTunnel.url}
-`;
-    fs.writeFileSync(backendEnvPath, backendEnvContent, 'utf8');
+    updateEnvFile(backendEnvPath, {
+      PUBLIC_FRONTEND_URL: frontendTunnel.url
+    });
     console.log('[OK] backend/.env updated.');
 
     // 4. Start backend server

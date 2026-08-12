@@ -116,7 +116,7 @@ const isLocalNetwork = window.location.hostname === 'localhost' ||
                        window.location.hostname.startsWith('192.168.') || 
                        window.location.hostname.startsWith('10.') || 
                        window.location.hostname.startsWith('172.');
-const API_BASE_URL = 'https://computers-teacher-investor-quest.trycloudflare.com';
+const API_BASE_URL = 'https://action-uniprotkb-ecommerce-mechanism.trycloudflare.com';
 
 // Step nodes for progress bar
 const stepNode1 = document.getElementById('step-node-1');
@@ -225,6 +225,7 @@ labelBw.addEventListener('click', () => {
   document.getElementById('label-color').classList.remove('active');
   printType = 'bw';
   updateCostEstimation();
+  updateLayoutPreview();
 });
 
 labelColor.addEventListener('click', () => {
@@ -233,6 +234,7 @@ labelColor.addEventListener('click', () => {
   document.getElementById('label-bw').classList.remove('active');
   printType = 'color';
   updateCostEstimation();
+  updateLayoutPreview();
 });
 
 btnCopyDec.addEventListener('click', () => {
@@ -841,6 +843,9 @@ function createPreviewSlot(item, itemIdx, slotAspect = 0.707) {
   if (item.type === 'image' && item.previewUrl) {
     const img = document.createElement('img');
     img.src = item.previewUrl;
+    if (printType === 'bw') {
+      img.style.filter = 'grayscale(1)';
+    }
     
     // Check orientation match and rotate if needed to maximize printable size
     const imgAspect = item.aspectRatio || 0.707;
@@ -856,6 +861,9 @@ function createPreviewSlot(item, itemIdx, slotAspect = 0.707) {
   } else if (item.type === 'pdf_page' && item.previewUrl) {
     const img = document.createElement('img');
     img.src = item.previewUrl;
+    if (printType === 'bw') {
+      img.style.filter = 'grayscale(1)';
+    }
     
     const imgAspect = item.aspectRatio || 0.707;
     const needsRotation = (slotAspect > 1.05 && imgAspect < 0.95) || (slotAspect < 0.95 && imgAspect > 1.05);
@@ -959,6 +967,9 @@ function createPreviewSlotZoom(item, slotAspect = 0.707) {
   if (item.type === 'image' && item.previewUrl) {
     const img = document.createElement('img');
     img.src = item.previewUrl;
+    if (printType === 'bw') {
+      img.style.filter = 'grayscale(1)';
+    }
     
     const imgAspect = item.aspectRatio || 0.707;
     const needsRotation = (slotAspect > 1.05 && imgAspect < 0.95) || (slotAspect < 0.95 && imgAspect > 1.05);
@@ -973,6 +984,9 @@ function createPreviewSlotZoom(item, slotAspect = 0.707) {
   } else if (item.type === 'pdf_page' && item.previewUrl) {
     const img = document.createElement('img');
     img.src = item.previewUrl;
+    if (printType === 'bw') {
+      img.style.filter = 'grayscale(1)';
+    }
     
     const imgAspect = item.aspectRatio || 0.707;
     const needsRotation = (slotAspect > 1.05 && imgAspect < 0.95) || (slotAspect < 0.95 && imgAspect > 1.05);
@@ -1045,6 +1059,47 @@ async function loadKioskSettings() {
     if (colorSubtitle) colorSubtitle.innerText = `₹${colorRate.toFixed(2)} / sheet`;
     
     updateCostEstimation();
+
+    // Check printer health and display warning banner if needed
+    const printers = Object.values(data.printers || {});
+    let hasAlert = false;
+    let alertText = '';
+
+    if (printers.length > 0) {
+      const allOffline = printers.every(p => p.status === 'offline');
+      const allPaperOut = printers.every(p => p.status === 'paper-out');
+
+      if (allOffline) {
+        hasAlert = true;
+        alertText = '⚠️ Attention: All kiosk printers are currently offline. You can still queue your job, but printing will resume only after the operator re-connects.';
+      } else if (allPaperOut) {
+        hasAlert = true;
+        alertText = '⚠️ Attention: Kiosk printers are currently out of paper. You can queue your job, but prints will be spooled after paper is re-filled.';
+      } else {
+        const offlinePrinters = printers.filter(p => p.status === 'offline');
+        const paperOutPrinters = printers.filter(p => p.status === 'paper-out');
+        const inkLowPrinters = printers.filter(p => p.status === 'ink-low');
+
+        if (offlinePrinters.length > 0 || paperOutPrinters.length > 0 || inkLowPrinters.length > 0) {
+          const warnings = [];
+          if (offlinePrinters.length > 0) warnings.push(`${offlinePrinters.length} printer(s) offline`);
+          if (paperOutPrinters.length > 0) warnings.push(`${paperOutPrinters.length} printer(s) out of paper`);
+          if (inkLowPrinters.length > 0) warnings.push(`${inkLowPrinters.length} printer(s) low on ink`);
+          hasAlert = true;
+          alertText = `⚠️ Warning: Kiosk status is limited (${warnings.join(', ')}). Your print job may experience slight delays.`;
+        }
+      }
+    }
+
+    const warningBanner = document.getElementById('printer-status-banner');
+    if (warningBanner) {
+      if (hasAlert) {
+        warningBanner.innerText = alertText;
+        warningBanner.style.display = 'block';
+      } else {
+        warningBanner.style.display = 'none';
+      }
+    }
   } catch (err) {
     console.warn("Failed to load dynamic settings:", err);
   }
@@ -1207,169 +1262,224 @@ async function startPrintJobFlow() {
     // 4. Open Razorpay payment gateway
     // 4. Open Payment Gateway (Simulated Modal if no Razorpay keys are set)
     if (orderData.mockOrder) {
-      updateProgress(80, "Awaiting Payment", "Please complete payment in the mock gateway popup...");
-
-      // Create simulated payment gateway modal
-      const modalOverlay = document.createElement('div');
-      modalOverlay.id = 'mock-gateway-overlay';
-      modalOverlay.style.position = 'fixed';
-      modalOverlay.style.top = '0';
-      modalOverlay.style.left = '0';
-      modalOverlay.style.width = '100%';
-      modalOverlay.style.height = '100%';
-      modalOverlay.style.background = 'rgba(15, 23, 42, 0.75)';
-      modalOverlay.style.backdropFilter = 'blur(6px)';
-      modalOverlay.style.zIndex = '99999';
-      modalOverlay.style.display = 'flex';
-      modalOverlay.style.alignItems = 'center';
-      modalOverlay.style.justifyContent = 'center';
-      modalOverlay.style.padding = '20px';
-
-      const amount = (sheets * (printType === 'bw' ? bwRate : colorRate) * copies).toFixed(2);
-      const payee = (upiId || '6370835040@ybl').trim();
-      const upiLink = `upi://pay?pa=${payee}&pn=InstaPrint&am=${amount}&cu=INR&tn=KioskPrint`;
-      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-
-      const modalBox = document.createElement('div');
-      modalBox.style.background = '#ffffff';
-      modalBox.style.borderRadius = '16px';
-      modalBox.style.padding = '32px';
-      modalBox.style.maxWidth = '400px';
-      modalBox.style.width = '100%';
-      modalBox.style.boxShadow = '0 25px 50px -12px rgba(0, 0, 0, 0.25)';
-      modalBox.style.border = '1px solid #e2e8f0';
-      modalBox.style.textAlign = 'center';
-      modalBox.style.fontFamily = "'Outfit', sans-serif";
-
-      // Create option buttons for QR/App vs Enter UPI ID
-      let upiHtml = `
-        <div style="display: flex; gap: 8px; margin-bottom: 18px;">
-          <button id="tab-upi-qr" style="flex: 1; padding: 10px 8px; border: 1.5px solid #2563eb; background: #2563eb; color: #ffffff; border-radius: 8px; font-weight: 700; cursor: pointer; font-size: 0.8rem; font-family: inherit; transition: all 0.2s;">Option 1: QR / App</button>
-          <button id="tab-upi-id" style="flex: 1; padding: 10px 8px; border: 1.5px solid #cbd5e1; background: #ffffff; color: #475569; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 0.8rem; font-family: inherit; transition: all 0.2s;">Option 2: Enter UPI ID</button>
-        </div>
-
-        <!-- Option 1: QR & App content -->
-        <div id="upi-qr-content" style="display: block; margin-bottom: 18px;">
-          <div style="margin-bottom: 12px;">
-            <p style="font-size: 0.72rem; color: #64748b; margin-bottom: 6px;">Scan QR with PhonePe / GPay / Paytm</p>
-            <img src="https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(upiLink)}" alt="Scan to Pay via UPI" style="margin: 0 auto; display: block; border: 2px solid #e2e8f0; border-radius: 8px; width: 140px; height: 140px;">
-          </div>
-          <button id="btn-upi-pay" style="background: #5f259f; color: #ffffff; border: none; padding: 12px; font-weight: 700; border-radius: 8px; cursor: pointer; transition: background 0.2s; font-size: 0.88rem; font-family: inherit; width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px;">
-            🟣 Open PhonePe / GPay App (₹${amount})
-          </button>
-          <p style="font-size: 0.72rem; color: #2563eb; font-weight: 600; margin-top: 8px; animation: pulse 2s infinite;">🔄 Waiting for payment confirmation...</p>
-        </div>
-
-        <!-- Option 2: Enter UPI ID & App Launchers -->
-        <div id="upi-id-content" style="display: none; text-align: left; margin-bottom: 18px;">
-          <div id="upi-id-form">
-            <label style="font-size: 0.78rem; font-weight: 600; color: #475569; display: block; margin-bottom: 8px;">Tap your installed UPI app to pay ₹${amount}:</label>
-            <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px;">
-              <button id="btn-pay-phonepe" type="button" style="background: #5f259f; color: #ffffff; border: none; padding: 11px; font-weight: 700; border-radius: 8px; cursor: pointer; font-size: 0.85rem; font-family: inherit; width: 100%; display: flex; align-items: center; justify-content: center; gap: 6px;">🟣 Pay via PhonePe</button>
-              <button id="btn-pay-gpay" type="button" style="background: #1a73e8; color: #ffffff; border: none; padding: 11px; font-weight: 700; border-radius: 8px; cursor: pointer; font-size: 0.85rem; font-family: inherit; width: 100%; display: flex; align-items: center; justify-content: center; gap: 6px;">🔵 Pay via Google Pay</button>
-              <button id="btn-pay-paytm" type="button" style="background: #00baf2; color: #ffffff; border: none; padding: 11px; font-weight: 700; border-radius: 8px; cursor: pointer; font-size: 0.85rem; font-family: inherit; width: 100%; display: flex; align-items: center; justify-content: center; gap: 6px;">🔷 Pay via Paytm</button>
-            </div>
-            <p style="font-size: 0.7rem; color: #64748b; text-align: center;">Merchant VPA: <strong>${payee}</strong></p>
-          </div>
-        </div>
-      `;
-
-      modalBox.innerHTML = `
-        <div style="font-size: 2.8rem; margin-bottom: 14px;">💳</div>
-        <h3 style="font-size: 1.3rem; font-weight: 800; color: #0f172a; margin-bottom: 6px;">InstaPrint Checkout</h3>
-        <p style="font-size: 0.8rem; color: #64748b; margin-bottom: 20px; line-height: 1.4;">Select your preferred payment option below.</p>
-        
-        <div style="background: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: 12px; padding: 16px; margin-bottom: 18px; text-align: left;">
-          <div style="display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 0.8rem; color: #475569;">
-            <span>Document sheets (${printType === 'bw' ? 'B&W' : 'Color'}):</span>
-            <span>${sheets} pages x ${copies} copies</span>
-          </div>
-          <div style="display: flex; justify-content: space-between; font-weight: 700; font-size: 0.95rem; color: #0f172a; border-top: 1px dashed #cbd5e1; padding-top: 8px; margin-top: 8px;">
-            <span>Total Payable:</span>
-            <span>₹${amount}</span>
-          </div>
-        </div>
-
-        ${upiHtml}
-
-        <div style="display: flex; flex-direction: column; gap: 8px; border-top: 1px solid #e2e8f0; padding-top: 14px; margin-top: 6px;">
-          <button id="btn-mock-pay-success" style="background: #16a34a; color: #ffffff; border: none; padding: 11px; font-weight: 700; border-radius: 8px; cursor: pointer; transition: background 0.2s; font-size: 0.85rem; font-family: inherit; width: 100%;">🟢 Simulate Successful Payment (Free Demo)</button>
-          <button id="btn-mock-pay-submit" style="background: #2563eb; color: #ffffff; border: none; padding: 11px; font-weight: 700; border-radius: 8px; cursor: pointer; transition: background 0.2s; font-size: 0.85rem; font-family: inherit; width: 100%;">✅ I Have Paid / Submit for Approval</button>
-          <button id="btn-mock-pay-cancel" style="background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; padding: 10px; font-weight: 600; border-radius: 8px; cursor: pointer; transition: background 0.2s; font-size: 0.82rem; font-family: inherit; width: 100%;">Cancel & Reset</button>
-        </div>
-      `;
-
-      modalOverlay.appendChild(modalBox);
-      document.body.appendChild(modalOverlay);
-
-      // Tab switcher handlers
-      const tabQr = document.getElementById('tab-upi-qr');
-      const tabId = document.getElementById('tab-upi-id');
-      const contentQr = document.getElementById('upi-qr-content');
-      const contentId = document.getElementById('upi-id-content');
-
-      tabQr.onclick = () => {
-        tabQr.style.background = '#2563eb';
-        tabQr.style.color = '#ffffff';
-        tabQr.style.border = '1.5px solid #2563eb';
-        tabQr.style.fontWeight = '700';
-
-        tabId.style.background = '#ffffff';
-        tabId.style.color = '#475569';
-        tabId.style.border = '1.5px solid #cbd5e1';
-        tabId.style.fontWeight = '600';
-
-        contentQr.style.display = 'block';
-        contentId.style.display = 'none';
-      };
-
-      tabId.onclick = () => {
-        tabId.style.background = '#2563eb';
-        tabId.style.color = '#ffffff';
-        tabId.style.border = '1.5px solid #2563eb';
-        tabId.style.fontWeight = '700';
-
-        tabQr.style.background = '#ffffff';
-        tabQr.style.color = '#475569';
-        tabQr.style.border = '1.5px solid #cbd5e1';
-        tabQr.style.fontWeight = '600';
-
-        contentId.style.display = 'block';
-        contentQr.style.display = 'none';
-      };
-
-      let jobResult = null;
-      let isSubmitting = false;
-      let pollInterval = null;
-      let firebaseJobListener = null;
-
-      // Cancel checkout handler helper
-      async function cancelCheckout() {
-        clearInterval(pollInterval);
-        if (firebaseJobListener) {
-          firebaseJobListener.off();
+      // Define simulated Razorpay SDK globally
+      window.Razorpay = class MockRazorpay {
+        constructor(options) {
+          this.options = options;
         }
-        modalOverlay.remove();
-        
-        if (jobResult && jobResult.jobId) {
-          try {
-            await fetch(`${API_BASE_URL}/api/jobs/${jobResult.jobId}/status`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ status: 'failed', errorMessage: 'Payment cancelled by user.' })
-            });
-          } catch (e) {}
+
+        open() {
+          const modalOverlay = document.createElement('div');
+          modalOverlay.id = 'mock-razorpay-overlay';
+          modalOverlay.style.position = 'fixed';
+          modalOverlay.style.top = '0';
+          modalOverlay.style.left = '0';
+          modalOverlay.style.width = '100%';
+          modalOverlay.style.height = '100%';
+          modalOverlay.style.background = 'rgba(15, 23, 42, 0.65)';
+          modalOverlay.style.backdropFilter = 'blur(4px)';
+          modalOverlay.style.zIndex = '99999';
+          modalOverlay.style.display = 'flex';
+          modalOverlay.style.alignItems = 'center';
+          modalOverlay.style.justifyContent = 'center';
+          modalOverlay.style.padding = '20px';
+
+          const container = document.createElement('div');
+          container.style.background = '#ffffff';
+          container.style.width = '100%';
+          container.style.maxWidth = '380px';
+          container.style.borderRadius = '12px';
+          container.style.boxShadow = '0 20px 25px -5px rgba(0, 0, 0, 0.15), 0 10px 10px -5px rgba(0, 0, 0, 0.04)';
+          container.style.overflow = 'hidden';
+          container.style.fontFamily = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+          container.style.border = '1px solid #e2e8f0';
+
+          // Header
+          const header = document.createElement('div');
+          header.style.background = this.options.theme?.color || '#3d5e35';
+          header.style.padding = '24px 20px';
+          header.style.color = '#ffffff';
+          header.style.position = 'relative';
+
+          // Close button
+          const closeBtn = document.createElement('button');
+          closeBtn.innerHTML = '&#x2715;';
+          closeBtn.style.position = 'absolute';
+          closeBtn.style.top = '16px';
+          closeBtn.style.right = '16px';
+          closeBtn.style.background = 'none';
+          closeBtn.style.border = 'none';
+          closeBtn.style.color = 'rgba(255, 255, 255, 0.8)';
+          closeBtn.style.fontSize = '18px';
+          closeBtn.style.cursor = 'pointer';
+          closeBtn.onclick = () => {
+            modalOverlay.remove();
+            if (this.options.modal?.ondismiss) {
+              this.options.modal.ondismiss();
+            }
+          };
+
+          const merchantName = document.createElement('h3');
+          merchantName.innerText = this.options.name || 'InstaPrint Kiosk';
+          merchantName.style.fontSize = '16px';
+          merchantName.style.fontWeight = '600';
+          merchantName.style.marginBottom = '4px';
+
+          const desc = document.createElement('p');
+          desc.innerText = this.options.description || '';
+          desc.style.fontSize = '12px';
+          desc.style.color = 'rgba(255, 255, 255, 0.8)';
+          desc.style.marginBottom = '12px';
+
+          const amountContainer = document.createElement('div');
+          amountContainer.style.fontSize = '22px';
+          amountContainer.style.fontWeight = '700';
+          amountContainer.innerText = `₹${(this.options.amount / 100).toFixed(2)}`;
+
+          header.appendChild(closeBtn);
+          header.appendChild(merchantName);
+          header.appendChild(desc);
+          header.appendChild(amountContainer);
+          container.appendChild(header);
+
+          // Content body
+          const body = document.createElement('div');
+          body.style.padding = '20px';
+
+          // Sandbox Banner
+          const banner = document.createElement('div');
+          banner.style.background = '#fff3cd';
+          banner.style.border = '1px solid #ffeeba';
+          banner.style.color = '#856404';
+          banner.style.padding = '8px 12px';
+          banner.style.borderRadius = '6px';
+          banner.style.fontSize = '11px';
+          banner.style.marginBottom = '16px';
+          banner.style.textAlign = 'center';
+          banner.innerText = '⚠️ Razorpay Sandbox / Test Mode';
+          body.appendChild(banner);
+
+          // List of simulated payment options
+          const optionsList = document.createElement('div');
+          optionsList.style.display = 'flex';
+          optionsList.style.flexDirection = 'column';
+          optionsList.style.gap = '10px';
+
+          const paymentMethods = [
+            { id: 'card', name: 'Card', desc: 'Visa, Mastercard, RuPay', icon: '💳' },
+            { id: 'upi', name: 'UPI', desc: 'Google Pay, PhonePe, Paytm', icon: '📱' },
+            { id: 'netbanking', name: 'Netbanking', desc: 'All Indian banks', icon: '🏦' },
+            { id: 'wallet', name: 'Wallet', desc: 'Mobikwik, Freecharge', icon: '👛' }
+          ];
+
+          paymentMethods.forEach(method => {
+            const btn = document.createElement('button');
+            btn.style.width = '100%';
+            btn.style.padding = '12px 16px';
+            btn.style.background = '#f8fafc';
+            btn.style.border = '1px solid #e2e8f0';
+            btn.style.borderRadius = '8px';
+            btn.style.display = 'flex';
+            btn.style.alignItems = 'center';
+            btn.style.gap = '12px';
+            btn.style.cursor = 'pointer';
+            btn.style.textAlign = 'left';
+            btn.style.transition = 'all 0.2s';
+            btn.onmouseover = () => {
+              btn.style.background = '#f1f5f9';
+              btn.style.borderColor = '#cbd5e1';
+            };
+            btn.onmouseout = () => {
+              btn.style.background = '#f8fafc';
+              btn.style.borderColor = '#e2e8f0';
+            };
+
+            const iconSpan = document.createElement('span');
+            iconSpan.innerHTML = method.icon;
+            iconSpan.style.fontSize = '20px';
+
+            const infoDiv = document.createElement('div');
+            const nameP = document.createElement('p');
+            nameP.innerText = method.name;
+            nameP.style.fontSize = '14px';
+            nameP.style.fontWeight = '600';
+            nameP.style.color = '#0f172a';
+
+            const descP = document.createElement('p');
+            descP.innerText = method.desc;
+            descP.style.fontSize = '11px';
+            descP.style.color = '#64748b';
+
+            infoDiv.appendChild(nameP);
+            infoDiv.appendChild(descP);
+            btn.appendChild(iconSpan);
+            btn.appendChild(infoDiv);
+
+            btn.onclick = () => {
+              simulatePaymentFlow(method.id);
+            };
+
+            optionsList.appendChild(btn);
+          });
+
+          body.appendChild(optionsList);
+
+          // Footer
+          const footer = document.createElement('div');
+          footer.style.marginTop = '20px';
+          footer.style.textAlign = 'center';
+          footer.style.fontSize = '10px';
+          footer.style.color = '#94a3b8';
+          footer.innerText = '🔒 Secured by Razorpay Mock Sandbox';
+          body.appendChild(footer);
+
+          container.appendChild(body);
+          modalOverlay.appendChild(container);
+          document.body.appendChild(modalOverlay);
+
+          const simulatePaymentFlow = (method) => {
+            body.innerHTML = `
+              <div style="text-align: center; padding: 30px 10px;">
+                <div style="border: 4px solid #f3f3f3; border-top: 4px solid ${this.options.theme?.color || '#3d5e35'}; border-radius: 50%; width: 40px; height: 40px; animation: rzp-spin 1s linear infinite; margin: 0 auto 16px auto;"></div>
+                <h4 style="font-size: 15px; font-weight: 600; color: #0f172a; margin-bottom: 4px;">Processing simulated ${method.toUpperCase()} payment...</h4>
+                <p style="font-size: 12px; color: #64748b;">Do not close this window or refresh the page.</p>
+              </div>
+              <style>
+                @keyframes rzp-spin {
+                  0% { transform: rotate(0deg); }
+                  100% { transform: rotate(360deg); }
+                }
+              </style>
+            `;
+
+            setTimeout(() => {
+              modalOverlay.remove();
+              const mockPaymentId = 'pay_mock_' + Math.random().toString(36).substr(2, 9);
+              const mockSignature = 'sig_mock_' + Math.random().toString(36).substr(2, 9);
+              this.options.handler({
+                razorpay_payment_id: mockPaymentId,
+                razorpay_signature: mockSignature,
+                razorpay_payment_method: method
+              });
+            }, 1500);
+          };
         }
-        navigateToPanel('settings');
-      }
+      };
+    }
 
-      // Handle successful payment simulation (Free Demo)
-      document.getElementById('btn-mock-pay-success').onclick = async () => {
-        if (isSubmitting) return;
-        isSubmitting = true;
-        updateProgress(90, "Processing Payment", "Simulating successful transaction...");
+    updateProgress(80, "Awaiting Payment", "Please complete payment in the popup...");
 
+    const options = {
+      key: orderData.keyId,
+      amount: orderData.amount,
+      currency: orderData.currency,
+      name: 'InstaPrint Kiosk',
+      description: `Print service for ${sheets} sheets`,
+      order_id: orderData.orderId,
+      handler: async function (response) {
         try {
+          updateProgress(90, "Verifying Payment", "Confirming secure transaction details...");
+
           const checkoutPayload = {
             fileUrl: fileUrl,
             printType: printType,
@@ -1378,230 +1488,53 @@ async function startPrintJobFlow() {
             clientId: clientId,
             customerContact: customerContact,
             shopId: shopId,
-            status: 'pending', // Paid immediately!
-            paid: true,
             payment: {
-              orderId: 'mock_order_' + Date.now(),
-              paymentId: 'mock_pay_' + Date.now(),
-              signature: 'mock_sig_' + Date.now(),
-              method: 'mock_payment'
+              orderId: orderData.orderId,
+              paymentId: response.razorpay_payment_id,
+              signature: response.razorpay_signature,
+              method: response.razorpay_payment_method || 'razorpay'
             },
             paperSize: document.getElementById('select-paper-size')?.value || 'A4'
           };
-
-          const response = await fetch(`${API_BASE_URL}/api/checkout`, {
+          const checkoutResp = await fetch(`${API_BASE_URL}/api/checkout`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json'
+            },
             body: JSON.stringify(checkoutPayload)
           });
-          jobResult = await response.json();
-          if (!response.ok) throw new Error(jobResult.error || "Failed checkout");
 
-          modalOverlay.remove();
+          const result = await checkoutResp.json();
+          if (!checkoutResp.ok) {
+            throw new Error(result.error || result.message || "Payment verification failed.");
+          }
+
           updateProgress(100, "Done", "Print job successfully scheduled.");
-          showReceipt(jobResult, sheets);
+          showReceipt(result, sheets);
         } catch (err) {
-          console.error("Mock payment checkout failed:", err);
-          alert(`Error: ${err.message}`);
-          modalOverlay.remove();
+          console.error("Payment confirmation failed:", err);
+          alert(`Error confirming payment: ${err.message}`);
           navigateToPanel('settings');
-        } finally {
-          isSubmitting = false;
         }
-      };
-
-      // Handle submitting job for shopkeeper manual approval (after scanning QR)
-      document.getElementById('btn-mock-pay-submit').onclick = async () => {
-        if (isSubmitting) return;
-        isSubmitting = true;
-        updateProgress(90, "Submitting Job", "Sending print job details to shopkeeper for verification...");
-
-        try {
-          const checkoutPayload = {
-            fileUrl: fileUrl,
-            printType: printType,
-            totalPages: sheets,
-            copies: copies,
-            clientId: clientId,
-            customerContact: customerContact,
-            shopId: shopId,
-            status: 'pending_payment', // Awaiting payment verification by shopkeeper
-            paperSize: document.getElementById('select-paper-size')?.value || 'A4'
-          };
-
-          const response = await fetch(`${API_BASE_URL}/api/checkout`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(checkoutPayload)
-          });
-          jobResult = await response.json();
-          if (!response.ok) throw new Error(jobResult.error || "Failed checkout");
-
-          // Start Polling backend for shopkeeper approval
-          startUpiStatusPolling(jobResult.jobId);
-          
-          // Show wait message in modal
-          const modalBox = modalOverlay.querySelector('div');
-          modalBox.innerHTML = `
-            <div style="font-size: 2.8rem; margin-bottom: 14px; animation: pulse 2s infinite;">⏳</div>
-            <h3 style="font-size: 1.3rem; font-weight: 800; color: #0f172a; margin-bottom: 6px;">Awaiting Verification</h3>
-            <p style="font-size: 0.82rem; color: #64748b; margin-bottom: 20px; line-height: 1.4;">
-              Your job has been submitted with <strong>Token: ${jobResult.tokenNumber}</strong>.<br><br>
-              Please inform the shopkeeper at the counter to verify your payment and release the print job.
-            </p>
-            <p style="font-size: 0.72rem; color: #2563eb; font-weight: 600; margin-bottom: 18px; animation: pulse 2s infinite;">🔄 Waiting for shopkeeper confirmation...</p>
-            <button id="btn-mock-pay-cancel-polling" style="background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; padding: 10px; font-weight: 600; border-radius: 8px; cursor: pointer; font-size: 0.82rem; font-family: inherit; width: 100%;">Cancel & Close</button>
-          `;
-
-          // Bind cancel inside the new UI
-          document.getElementById('btn-mock-pay-cancel-polling').onclick = () => {
-            cancelCheckout();
-          };
-
-        } catch (err) {
-          console.error("Manual job submission failed:", err);
-          alert(`Error: ${err.message}`);
-          modalOverlay.remove();
+      },
+      prefill: {
+        name: 'Kiosk User',
+        email: customerContact || 'user@kiosk.com',
+        contact: '9999999999'
+      },
+      theme: {
+        color: '#3d5e35'
+      },
+      modal: {
+        ondismiss: function () {
+          alert("Payment cancelled. The print job has not been scheduled.");
           navigateToPanel('settings');
-        } finally {
-          isSubmitting = false;
-        }
-      };
-
-      // Mobile app click
-      const btnUpiPay = document.getElementById('btn-upi-pay');
-      if (btnUpiPay) {
-        btnUpiPay.onclick = () => {
-          window.location.href = upiLink;
-        };
-      }
-
-      // Option 2 direct UPI App Launchers
-      const btnPhonepe = document.getElementById('btn-pay-phonepe');
-      if (btnPhonepe) {
-        btnPhonepe.onclick = () => {
-          window.location.href = upiLink;
-        };
-      }
-      const btnGpay = document.getElementById('btn-pay-gpay');
-      if (btnGpay) {
-        btnGpay.onclick = () => {
-          window.location.href = upiLink;
-        };
-      }
-      const btnPaytm = document.getElementById('btn-pay-paytm');
-      if (btnPaytm) {
-        btnPaytm.onclick = () => {
-          window.location.href = upiLink;
-        };
-      }
-
-      // Cancel button
-      document.getElementById('btn-mock-pay-cancel').onclick = () => {
-        cancelCheckout();
-      };
-
-      // Polling & Real-time approval listeners
-
-      function startUpiStatusPolling(jobId) {
-        if (firebaseInitialized && !jobId.includes('mock_')) {
-          firebaseJobListener = firebase.database().ref(`print_queue/${jobId}`);
-          firebaseJobListener.on('value', (snapshot) => {
-            const val = snapshot.val();
-            if (val && val.status !== 'pending_payment') {
-              firebaseJobListener.off();
-              modalOverlay.remove();
-              showReceipt(jobResult, sheets, false);
-            }
-          });
-        } else {
-          pollInterval = setInterval(async () => {
-            try {
-              const resp = await fetch(`${API_BASE_URL}/api/jobs?shopId=${shopId}`);
-              const jobs = await resp.json();
-              const currentJob = jobs[jobId];
-              if (currentJob && currentJob.status !== 'pending_payment') {
-                clearInterval(pollInterval);
-                modalOverlay.remove();
-                showReceipt(jobResult, sheets, false);
-              }
-            } catch (err) {
-              // silent
-            }
-          }, 2000);
         }
       }
-    } else {
-      // Live Mode: Open Razorpay script modal
-      updateProgress(80, "Awaiting Payment", "Please complete payment in the popup...");
+    };
 
-      const options = {
-        key: orderData.keyId,
-        amount: orderData.amount,
-        currency: orderData.currency,
-        name: 'InstaPrint Kiosk',
-        description: `Print service for ${sheets} sheets`,
-        order_id: orderData.orderId,
-        handler: async function (response) {
-          try {
-            updateProgress(90, "Verifying Payment", "Confirming secure transaction details...");
-
-            const checkoutPayload = {
-              fileUrl: fileUrl,
-              printType: printType,
-              totalPages: sheets,
-              copies: copies,
-              clientId: clientId,
-              customerContact: customerContact,
-              shopId: shopId,
-              payment: {
-                orderId: orderData.orderId,
-                paymentId: response.razorpay_payment_id,
-                signature: response.razorpay_signature,
-                method: response.razorpay_payment_method || 'razorpay'
-              },
-              paperSize: document.getElementById('select-paper-size')?.value || 'A4'
-            };
-            const checkoutResp = await fetch(`${API_BASE_URL}/api/checkout`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json'
-              },
-              body: JSON.stringify(checkoutPayload)
-            });
-
-            const result = await checkoutResp.json();
-            if (!checkoutResp.ok) {
-              throw new Error(result.error || result.message || "Payment verification failed.");
-            }
-
-            updateProgress(100, "Done", "Print job successfully scheduled.");
-            showReceipt(result, sheets);
-          } catch (err) {
-            console.error("Payment confirmation failed:", err);
-            alert(`Error confirming payment: ${err.message}`);
-            navigateToPanel('settings');
-          }
-        },
-        prefill: {
-          name: 'Kiosk User',
-          email: customerContact || 'user@kiosk.com',
-          contact: '9999999999'
-        },
-        theme: {
-          color: '#3d5e35'
-        },
-        modal: {
-          ondismiss: function () {
-            alert("Payment cancelled. The print job has not been scheduled.");
-            navigateToPanel('settings');
-          }
-        }
-      };
-
-      const rzp = new Razorpay(options);
-      rzp.open();
-    }
+    const rzp = new Razorpay(options);
+    rzp.open();
 
   } catch (error) {
     console.error("Print Job Flow failed:", error);

@@ -6,14 +6,22 @@ const path = require('path');
 const os = require('os');
 const express = require('express');
 const cors = require('cors');
-require('dotenv').config();
 const { PDFDocument, rgb, StandardFonts } = require('pdf-lib');
+
+// pkg-compatible base directory:
+// When running as a compiled .exe, process.execPath is the .exe itself.
+// We store mutable files (config, journal, .env) next to the .exe, not inside the bundle.
+const IS_PKG = typeof process.pkg !== 'undefined';
+const BASE_DIR = IS_PKG ? path.dirname(process.execPath) : __dirname;
+
+// Load .env from alongside the .exe (or script dir in dev mode)
+require('dotenv').config({ path: path.join(BASE_DIR, '.env') });
 
 const BACKEND_API_URL = process.env.BACKEND_API_URL || 'http://localhost:5002';
 let SHOP_ID = process.env.SHOP_ID || 'default_shop';
 
-// Config File path for local printer settings
-const configFilePath = path.join(__dirname, 'config.json');
+// Mutable config/journal files live next to the .exe on disk
+const configFilePath = path.join(BASE_DIR, 'config.json');
 
 // Initialize local printer configuration + persisted shop settings
 let localConfig = {
@@ -25,7 +33,8 @@ let localConfig = {
   maxPagesPerBatch: 80,
   cooldownMin: 5,
   printers: {},
-  upiId: ''
+  upiId: '',
+  sessionToken: ''
 };
 
 // Trackers for currently printing jobs on B&W and Color channels
@@ -61,6 +70,158 @@ function saveLocalConfig() {
 
 loadLocalConfig();
 
+let sessionToken = localConfig.sessionToken || '';
+
+const journalFilePath = path.join(BASE_DIR, 'jobs_journal.json');
+
+function loadJournal() {
+  try {
+    if (fs.existsSync(journalFilePath)) {
+      return JSON.parse(fs.readFileSync(journalFilePath, 'utf8'));
+    }
+  } catch (err) {
+    console.error('Agent Journal: Failed to read jobs_journal.json:', err.message);
+  }
+  return {};
+}
+
+function saveJournal(journal) {
+  try {
+    fs.writeFileSync(journalFilePath, JSON.stringify(journal, null, 2), 'utf8');
+  } catch (err) {
+    console.error('Agent Journal: Failed to write jobs_journal.json:', err.message);
+  }
+}
+
+function journalUpdate(jobId, jobData, localStatus, remoteStatus, extra = {}, pendingSync = false) {
+  const journal = loadJournal();
+  
+  if (!journal[jobId]) {
+    journal[jobId] = {
+      id: jobId,
+      jobData: jobData,
+      localStatus: localStatus,
+      remoteStatus: remoteStatus,
+      extra: extra,
+      pendingSync: pendingSync,
+      updatedAt: Date.now()
+    };
+  } else {
+    if (jobData) journal[jobId].jobData = jobData;
+    journal[jobId].localStatus = localStatus;
+    journal[jobId].remoteStatus = remoteStatus;
+    journal[jobId].extra = { ...journal[jobId].extra, ...extra };
+    journal[jobId].pendingSync = pendingSync;
+    journal[jobId].updatedAt = Date.now();
+  }
+
+  saveJournal(journal);
+}
+
+async function syncJobStatusUpdate(jobId, statusVal, extra = {}) {
+  const journal = loadJournal();
+  const job = journal[jobId];
+  const jobData = job ? job.jobData : null;
+  
+  // Save locally first with pendingSync flag
+  journalUpdate(jobId, jobData, statusVal, job?.remoteStatus || 'unknown', extra, true);
+
+  try {
+    if (db) {
+      await db.ref(`print_queue/${jobId}`).update({ status: statusVal, ...extra });
+    } else {
+      await axios.post(`${BACKEND_API_URL}/api/jobs/${jobId}/status`, { status: statusVal, ...extra });
+    }
+    // Remote success: clear pendingSync
+    journalUpdate(jobId, jobData, statusVal, statusVal, extra, false);
+    console.log(`Agent Journal: Synced status '${statusVal}' for job ${jobId} to cloud.`);
+  } catch (err) {
+    console.warn(`Agent Journal: Offline or failed to sync status '${statusVal}' for job ${jobId}. Buffered locally.`);
+  }
+}
+
+async function syncJobPriorityUpdate(jobId, priorityVal) {
+  const journal = loadJournal();
+  const job = journal[jobId];
+  if (job && job.jobData) {
+    job.jobData.priority = priorityVal;
+    saveJournal(journal);
+    
+    // Save locally first with pendingSync flag
+    journalUpdate(jobId, job.jobData, job.localStatus, job.remoteStatus, {}, true);
+  }
+
+  try {
+    if (db) {
+      await db.ref(`print_queue/${jobId}`).update({ priority: priorityVal });
+    } else {
+      await axios.post(`${BACKEND_API_URL}/api/jobs/${jobId}/priority`, { priority: priorityVal });
+    }
+    // Remote success
+    const updatedJournal = loadJournal();
+    if (updatedJournal[jobId]) {
+      updatedJournal[jobId].pendingSync = false;
+      saveJournal(updatedJournal);
+    }
+    console.log(`Agent Journal: Synced priority '${priorityVal}' for job ${jobId} to cloud.`);
+  } catch (err) {
+    console.warn(`Agent Journal: Offline or failed to sync priority for job ${jobId}. Buffered locally.`);
+  }
+}
+
+function startJournalSyncLoop() {
+  setInterval(async () => {
+    const journal = loadJournal();
+    let hasUpdates = false;
+
+    for (const [jobId, entry] of Object.entries(journal)) {
+      if (entry.pendingSync) {
+        try {
+          if (db) {
+            await db.ref(`print_queue/${jobId}`).update({
+              status: entry.localStatus,
+              priority: !!entry.jobData?.priority,
+              ...entry.extra
+            });
+          } else {
+            await axios.post(`${BACKEND_API_URL}/api/jobs/${jobId}/status`, {
+              status: entry.localStatus,
+              ...entry.extra
+            });
+            await axios.post(`${BACKEND_API_URL}/api/jobs/${jobId}/priority`, {
+              priority: !!entry.jobData?.priority
+            });
+          }
+          entry.remoteStatus = entry.localStatus;
+          entry.pendingSync = false;
+          hasUpdates = true;
+          console.log(`Agent Journal Sync: Successfully synced job ${jobId} status to cloud.`);
+        } catch (err) {
+          // Suppress error to avoid log flood during connection down periods
+        }
+      }
+    }
+
+    if (hasUpdates) {
+      saveJournal(journal);
+    }
+  }, 10000);
+}
+
+function recoverJobsFromJournal() {
+  const journal = loadJournal();
+  let count = 0;
+  Object.entries(journal).forEach(([id, entry]) => {
+    if (entry.localStatus === 'pending' || entry.localStatus === 'printing') {
+      enqueueJob(id, entry.jobData);
+      count++;
+    }
+  });
+  if (count > 0) {
+    console.log(`Agent: Recovered and re-enqueued ${count} jobs from local journal.`);
+  }
+}
+
 // Initialize Firebase Admin
 const firebaseDbUrl = process.env.FIREBASE_DATABASE_URL;
 const serviceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH || './serviceAccountKey.json';
@@ -82,6 +243,21 @@ try {
   }
 } catch (error) {
   console.error('Agent: Firebase initialization failed.', error);
+}
+
+// Initialize Supabase Client
+const { createClient } = require('@supabase/supabase-js');
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
+let supabase;
+
+if (supabaseUrl && supabaseAnonKey) {
+  try {
+    supabase = createClient(supabaseUrl, supabaseAnonKey);
+    console.log('Agent: Supabase Client initialized.');
+  } catch (err) {
+    console.error('Agent: Failed to initialize Supabase client:', err.message);
+  }
 }
 
 // Global list to keep track of active job statuses for the dashboard log
@@ -112,6 +288,10 @@ function enqueueJob(id, jobData) {
     existing.jobData = jobData;
     console.log(`Agent Queue: Updated Job Token ${jobData.tokenNumber} (Priority: ${!!jobData.priority})`);
   }
+
+  // Persist to local journal
+  journalUpdate(id, jobData, jobData.status || 'pending', jobData.status || 'pending');
+
   sortJobQueue();
   processNextJobInQueue();
 }
@@ -160,40 +340,154 @@ async function processNextJobInQueue() {
   }
 }
 
-if (db) {
+// Start offline sync and recover journal queue on launch
+startJournalSyncLoop();
+recoverJobsFromJournal();
+
+let realtimeChannel;
+
+if (supabase || db) {
   startLiveListener();
 } else {
   console.warn('Agent: Running in local demo database mode. Polling local mock backend server...');
   setInterval(pollMockCloudJobs, 3000);
 }
 
-// 1. Live RTDB Print Job Listener
+function mapSupabaseJob(row) {
+  return {
+    id: row.id,
+    fileUrl: row.file_url,
+    printType: row.print_type,
+    totalPages: parseInt(row.total_pages),
+    copies: parseInt(row.copies),
+    tokenNumber: row.token_number,
+    status: row.status,
+    paid: row.paid,
+    cost: parseFloat(row.cost),
+    paymentId: row.payment_id,
+    createdAt: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
+    shopId: row.shop_id,
+    errorMessage: row.error_message,
+    printedAt: row.printed_at ? new Date(row.printed_at).getTime() : undefined,
+    priority: row.priority,
+    paperSize: row.paper_size
+  };
+}
+
+
+// 1. Live RTDB / Supabase Realtime Print Job Listener
 function startLiveListener() {
+  if (supabase) {
+    console.log(`Agent: Listening for pending print jobs on Supabase Realtime for Shop ID: ${SHOP_ID}...`);
+    
+    if (realtimeChannel) {
+      realtimeChannel.unsubscribe();
+    }
+
+    realtimeChannel = supabase
+      .channel('pending_jobs_channel')
+      .on('postgres_changes', {
+        event: '*', // Listen to INSERT, UPDATE
+        schema: 'public',
+        table: 'print_queue',
+        filter: `shop_id=eq.${SHOP_ID}`
+      }, (payload) => {
+        const row = payload.new;
+        if (row && row.status === 'pending') {
+          const mappedJob = mapSupabaseJob(row);
+          enqueueJob(row.id, mappedJob);
+        }
+      })
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('Agent: Successfully subscribed to Supabase Realtime Postgres Changes.');
+        }
+      });
+      
+    return;
+  }
+
   if (db) {
     try {
       db.ref('print_queue').off();
     } catch (e) {
       console.warn('Agent: Error clearing firebase listeners:', e.message);
     }
+
+    console.log(`Agent: Listening for pending print jobs on Firebase Cloud for Shop ID: ${SHOP_ID}...`);
+    const queueRef = db.ref('print_queue');
+
+    queueRef.orderByChild('status').equalTo('pending').on('child_added', (snapshot) => {
+      const job = snapshot.val();
+      if (job && job.shopId === SHOP_ID) {
+        enqueueJob(snapshot.key, job);
+      }
+    });
+
+    queueRef.orderByChild('status').equalTo('pending').on('child_changed', (snapshot) => {
+      const job = snapshot.val();
+      if (job && job.shopId === SHOP_ID) {
+        enqueueJob(snapshot.key, job);
+      }
+    });
   }
-
-  console.log(`Agent: Listening for pending print jobs on Firebase Cloud for Shop ID: ${SHOP_ID}...`);
-  const queueRef = db.ref('print_queue');
-
-  queueRef.orderByChild('status').equalTo('pending').on('child_added', (snapshot) => {
-    const job = snapshot.val();
-    if (job && job.shopId === SHOP_ID) {
-      enqueueJob(snapshot.key, job);
-    }
-  });
-
-  queueRef.orderByChild('status').equalTo('pending').on('child_changed', (snapshot) => {
-    const job = snapshot.val();
-    if (job && job.shopId === SHOP_ID) {
-      enqueueJob(snapshot.key, job);
-    }
-  });
 }
+
+async function updatePrintersStatusHeartbeat() {
+  try {
+    let printers = localConfig.printers || {};
+    let statusChanged = false;
+
+    for (const [id, printer] of Object.entries(printers)) {
+      let currentStatus = 'online';
+      
+      if (process.env.MOCK_PRINT_TO_FILE !== 'true') {
+        try {
+          const osPrinters = await ptp.getPrinters();
+          const match = osPrinters.find(p => p.name === printer.name);
+          if (!match) {
+            currentStatus = 'offline';
+          }
+        } catch (e) {
+          // silent fallback
+        }
+      } else {
+        const rand = Math.random();
+        if (rand < 0.05) currentStatus = 'paper-out';
+        else if (rand < 0.10) currentStatus = 'ink-low';
+        else currentStatus = 'online';
+      }
+
+      if (printer.status !== currentStatus) {
+        printer.status = currentStatus;
+        statusChanged = true;
+      }
+    }
+
+    if (statusChanged) {
+      localConfig.printers = printers;
+      saveLocalConfig();
+      
+      if (db) {
+        await db.ref(`settings/${SHOP_ID}/printers`).set(printers);
+      } else {
+        const headers = {};
+        if (sessionToken) {
+          headers['Authorization'] = `Bearer ${sessionToken}`;
+        }
+        await axios.post(`${BACKEND_API_URL}/api/settings`, { shopId: SHOP_ID, printers }, { headers });
+      }
+      console.log('Agent: Updated printer health statuses to database.');
+    }
+  } catch (err) {
+    // suppress logs
+  }
+}
+
+// Check and update printers status every 30 seconds
+setInterval(updatePrintersStatusHeartbeat, 30000);
+// Trigger initial check immediately
+setTimeout(updatePrintersStatusHeartbeat, 2000);
 
 // Offline Polling loop to fetch print jobs from localhost:5002 when Firebase is offline
 async function pollMockCloudJobs() {
@@ -267,11 +561,7 @@ async function printJobDirect(jobId, job) {
   console.log(`Agent: Processing Job ${job.tokenNumber} (${job.printType})...`);
 
   async function updateJobStatus(statusVal, extra = {}) {
-    if (db) {
-      await db.ref(`print_queue/${jobId}`).update({ status: statusVal, ...extra });
-    } else {
-      await axios.post(`${BACKEND_API_URL}/api/jobs/${jobId}/status`, { status: statusVal, ...extra });
-    }
+    await syncJobStatusUpdate(jobId, statusVal, extra);
   }
 
   // Update ongoing print trackers
@@ -364,7 +654,7 @@ async function printJobDirect(jobId, job) {
     // Spool print job or save to mock prints folder in dev mode
     const mockPrintToFile = process.env.MOCK_PRINT_TO_FILE === 'true';
     if (mockPrintToFile) {
-      const mockPrintsDir = path.join(__dirname, 'mock_prints');
+      const mockPrintsDir = path.join(BASE_DIR, 'mock_prints');
       if (!fs.existsSync(mockPrintsDir)) {
         fs.mkdirSync(mockPrintsDir, { recursive: true });
       }
@@ -428,59 +718,92 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: '60mb' }));
 
-// POST: Forward login credentials to backend and switch local Shop ID context on success
+// POST: Forward login to backend; update local Shop ID context on success
 app.post('/api/login', async (req, res) => {
-  const { shopId, password, action = 'login' } = req.body;
+  const { shopId, password } = req.body;
   if (!shopId || !password) {
     return res.status(400).json({ error: 'Shop ID and password are required.' });
   }
 
   try {
-    // Check if profile exists
+    // Confirm profile exists in the backend before attempting login
     let profileExists = false;
     try {
       const profileResp = await axios.get(`${BACKEND_API_URL}/api/v1/profile/${shopId}`);
       profileExists = profileResp.data.passwordSet;
-    } catch (e) {
-      // quiet fallback
-    }
+    } catch (e) { /* quiet fallback */ }
 
-    if (action === 'login' && !profileExists) {
+    if (!profileExists) {
       return res.status(400).json({ error: 'Shop ID is not registered. Please register first.' });
     }
 
-    if (action === 'register' && profileExists) {
-      return res.status(400).json({ error: 'Shop ID is already registered. Please log in.' });
-    }
-
     const loginResp = await axios.post(`${BACKEND_API_URL}/api/v1/auth/login`, { shopId, password });
-    if (loginResp.data.success) {
-      // Update local agent configuration and switch SHOP_ID
-      localConfig.shopId = shopId;
-      saveLocalConfig();
-      SHOP_ID = shopId;
-
-      // Clear current print queue and reset printing state for the new shop
-      jobQueue = [];
-      isPrinting = false;
-
-      // Restart live listener for the new SHOP_ID
-      if (db) {
-        startLiveListener();
-      }
-
-      console.log(`Agent: Successfully switched to Shop ID: ${SHOP_ID}`);
-      res.json({
-        success: true,
-        token: loginResp.data.token,
-        shopId: shopId,
-        firstLogin: loginResp.data.firstLogin
-      });
-    } else {
-      res.status(401).json({ error: 'Incorrect password.' });
+    if (!loginResp.data.success) {
+      return res.status(401).json({ error: 'Incorrect password.' });
     }
+
+    // Switch local agent context to the new shop
+    localConfig.shopId = shopId;
+    localConfig.sessionToken = loginResp.data.token || '';
+    saveLocalConfig();
+    SHOP_ID = shopId;
+    sessionToken = loginResp.data.token || '';
+
+    // Reset print state for the new shop
+    jobQueue = [];
+    isPrinting = false;
+
+    // Restart live listener (Firebase or Supabase)
+    startLiveListener();
+
+    console.log(`Agent: Logged in → Shop ID: ${SHOP_ID}`);
+    res.json({
+      success: true,
+      token: loginResp.data.token,
+      shopId,
+      firstLogin: loginResp.data.firstLogin || false
+    });
   } catch (err) {
-    console.error('Agent login forward failed:', err.message);
+    console.error('Agent login error:', err.message);
+    const status = err.response?.status || 500;
+    const errMsg = err.response?.data?.error || err.message;
+    res.status(status).json({ error: errMsg });
+  }
+});
+
+// POST: Register a new shop — creates Supabase Auth user + profile
+app.post('/api/register', async (req, res) => {
+  const { shopName, email, password } = req.body;
+  if (!shopName || !email || !password) {
+    return res.status(400).json({ error: 'Shop name, email, and password are required.' });
+  }
+
+  try {
+    const registerResp = await axios.post(`${BACKEND_API_URL}/api/v1/auth/register`, { shopName, email, password });
+    if (!registerResp.data.success) {
+      return res.status(400).json({ error: registerResp.data.error || 'Registration failed.' });
+    }
+
+    const { shopId, token } = registerResp.data;
+
+    // Set local agent context to the newly registered shop
+    localConfig.shopId = shopId;
+    localConfig.sessionToken = token || '';
+    saveLocalConfig();
+    SHOP_ID = shopId;
+    sessionToken = token || '';
+
+    // Reset print state
+    jobQueue = [];
+    isPrinting = false;
+
+    // Start live listener for the new shop
+    startLiveListener();
+
+    console.log(`Agent: Registered new shop → Shop ID: ${SHOP_ID}`);
+    res.json(registerResp.data);
+  } catch (err) {
+    console.error('Agent register error:', err.message);
     const status = err.response?.status || 500;
     const errMsg = err.response?.data?.error || err.message;
     res.status(status).json({ error: errMsg });
@@ -549,7 +872,83 @@ app.get('/api/config', async (_req, res) => {
   let ordersCount = 0;
 
   try {
-    if (db) {
+    if (supabase) {
+      const { data: settingsData } = await supabase
+        .from('settings')
+        .select('*')
+        .eq('shop_id', SHOP_ID)
+        .maybeSingle();
+
+      if (settingsData) {
+        bwPrice = settingsData.bw_price ?? 2;
+        colorPrice = settingsData.color_price ?? 10;
+        maxPagesPerBatch = settingsData.max_pages_per_batch ?? 80;
+        cooldownMin = settingsData.cooldown_min ?? 5;
+        printers = settingsData.printers ?? {};
+      }
+
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('upi_id')
+        .eq('shop_id', SHOP_ID)
+        .maybeSingle();
+
+      if (profileData) {
+        upiId = profileData.upi_id ?? '';
+      }
+
+      const { data: queueData } = await supabase
+        .from('print_queue')
+        .select('*')
+        .eq('shop_id', SHOP_ID);
+
+      const dbLogs = [];
+      if (queueData) {
+        queueData.forEach((row) => {
+          const job = {
+            id: row.id,
+            shopId: row.shop_id,
+            fileUrl: row.file_url,
+            printType: row.print_type,
+            totalPages: Number(row.total_pages),
+            copies: Number(row.copies),
+            tokenNumber: row.token_number,
+            status: row.status,
+            paid: row.paid,
+            cost: Number(row.cost),
+            paymentId: row.payment_id,
+            createdAt: new Date(row.created_at).getTime(),
+            priority: row.priority,
+            errorMessage: row.error_message
+          };
+
+          if (job.status === 'completed' && job.cost) {
+            revenue += job.cost;
+            ordersCount++;
+          }
+          dbLogs.push({
+            id: job.id,
+            token: job.tokenNumber,
+            printType: job.printType,
+            copies: job.copies,
+            sheets: job.totalPages,
+            status: job.status,
+            cost: job.cost || 0,
+            timestamp: new Date(job.createdAt || Date.now()).toLocaleTimeString(),
+            priority: job.priority || false
+          });
+        });
+        dbLogs.sort((a, b) => {
+          const isACompleted = a.status === 'completed';
+          const isBCompleted = b.status === 'completed';
+          if (isACompleted && !isBCompleted) return 1;
+          if (!isACompleted && isBCompleted) return -1;
+          return b.id.localeCompare(a.id);
+        });
+      }
+      printLogs.length = 0;
+      printLogs.push(...dbLogs);
+    } else if (db) {
       // Fetch prices and batch limits for the specific shop
       const settingsSnap = await db.ref(`settings/${SHOP_ID}`).once('value');
       const settings = settingsSnap.val();
@@ -680,6 +1079,97 @@ app.get('/api/config', async (_req, res) => {
   });
 });
 
+app.get('/api/analytics', async (req, res) => {
+  try {
+    let completedJobs = [];
+    
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('print_queue')
+        .select('*')
+        .eq('shop_id', SHOP_ID)
+        .eq('status', 'completed');
+      if (!error && data) {
+        completedJobs = data.map(row => ({
+          printType: row.print_type,
+          totalPages: Number(row.total_pages),
+          copies: Number(row.copies),
+          cost: Number(row.cost),
+          createdAt: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
+          paperSize: row.paper_size
+        }));
+      }
+    } else if (db) {
+      const snap = await db.ref('print_queue').once('value');
+      const val = snap.val();
+      if (val) {
+        Object.values(val).forEach(job => {
+          if (job.shopId === SHOP_ID && job.status === 'completed') {
+            completedJobs.push({
+              printType: job.printType,
+              totalPages: job.totalPages || 1,
+              copies: job.copies || 1,
+              cost: job.cost || 0,
+              createdAt: job.createdAt || Date.now(),
+              paperSize: job.paperSize || 'A4'
+            });
+          }
+        });
+      }
+    } else {
+      printLogs.forEach(log => {
+        if (log.status === 'completed') {
+          completedJobs.push({
+            printType: log.printType,
+            totalPages: log.sheets || 1,
+            copies: log.copies || 1,
+            cost: log.cost || 0,
+            createdAt: Date.now(),
+            paperSize: 'A4'
+          });
+        }
+      });
+    }
+
+    let totalRevenue = 0;
+    let totalSheets = 0;
+    let bwCount = 0;
+    let colorCount = 0;
+    let paperSizeCounts = {};
+    let hourlyDistribution = Array(24).fill(0);
+
+    completedJobs.forEach(job => {
+      totalRevenue += job.cost;
+      totalSheets += (job.totalPages * job.copies);
+      if (job.printType === 'bw') bwCount++;
+      else if (job.printType === 'color') colorCount++;
+      
+      const pSize = job.paperSize || 'A4';
+      paperSizeCounts[pSize] = (paperSizeCounts[pSize] || 0) + 1;
+      
+      const hour = new Date(job.createdAt).getHours();
+      hourlyDistribution[hour]++;
+    });
+
+    const avgSheets = completedJobs.length > 0 ? (totalSheets / completedJobs.length).toFixed(1) : 0;
+
+    res.json({
+      revenue: totalRevenue,
+      orders: completedJobs.length,
+      averageSheets: Number(avgSheets),
+      ratios: {
+        bw: bwCount,
+        color: colorCount
+      },
+      paperSizes: paperSizeCounts,
+      hourlyDistribution: hourlyDistribution
+    });
+  } catch (err) {
+    console.error('Agent: Failed to generate analytics data:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Save Local Printer Mappings (Write to config.json)
 app.post('/api/config', (req, res) => {
   const { bwPrinter, colorPrinter } = req.body;
@@ -710,7 +1200,16 @@ app.post('/api/settings', async (req, res) => {
       const payload = { shopId: SHOP_ID, bwPrice: localConfig.bwPrice, colorPrice: localConfig.colorPrice, maxPagesPerBatch: localConfig.maxPagesPerBatch, cooldownMin: localConfig.cooldownMin };
       if (printers !== undefined) payload.printers = printers;
       if (upiId !== undefined) payload.upiId = upiId;
-      await axios.post(`${BACKEND_API_URL}/api/settings`, payload);
+      
+      const headers = {};
+      const authHeader = req.headers.authorization;
+      if (authHeader) {
+        headers['Authorization'] = authHeader;
+      } else if (sessionToken) {
+        headers['Authorization'] = `Bearer ${sessionToken}`;
+      }
+
+      await axios.post(`${BACKEND_API_URL}/api/settings`, payload, { headers });
       res.json({ success: true, message: 'Settings saved successfully.' });
     } catch (err) {
       // Even if backend call fails, local config is already saved
@@ -739,21 +1238,11 @@ app.post('/api/settings', async (req, res) => {
 app.post('/api/jobs/:id/priority', async (req, res) => {
   const { id } = req.params;
   const { priority } = req.body;
-
-  if (!db) {
-    try {
-      await axios.post(`${BACKEND_API_URL}/api/jobs/${id}/priority`, { priority });
-      res.json({ success: true, message: 'Priority updated successfully.' });
-    } catch (err) {
-      res.status(500).json({ error: 'Failed to update priority: ' + err.message });
-    }
-  } else {
-    try {
-      await db.ref(`print_queue/${id}`).update({ priority: !!priority });
-      res.json({ success: true, message: 'Priority updated successfully.' });
-    } catch (err) {
-      res.status(500).json({ error: 'Failed to update priority: ' + err.message });
-    }
+  try {
+    await syncJobPriorityUpdate(id, !!priority);
+    res.json({ success: true, message: 'Priority updated successfully.' });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update priority: ' + err.message });
   }
 });
 
@@ -761,29 +1250,17 @@ app.post('/api/jobs/:id/priority', async (req, res) => {
 app.post('/api/jobs/:id/status', async (req, res) => {
   const { id } = req.params;
   const { status, paid } = req.body;
-
-  if (!db) {
-    try {
-      await axios.post(`${BACKEND_API_URL}/api/jobs/${id}/status`, { status, paid });
-      res.json({ success: true });
-    } catch (err) {
-      res.status(500).json({ error: 'Failed to update status on local mock cloud: ' + err.message });
-    }
-  } else {
-    try {
-      const updateData = { status };
-      if (paid !== undefined) updateData.paid = paid;
-      await db.ref(`print_queue/${id}`).update(updateData);
-      res.json({ success: true });
-    } catch (err) {
-      res.status(500).json({ error: 'Failed to write status to database: ' + err.message });
-    }
+  try {
+    await syncJobStatusUpdate(id, status, paid !== undefined ? { paid } : {});
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update status: ' + err.message });
   }
 });
 
 // Start dashboard server on Port 3000
 const DASHBOARD_PORT = 3000;
-app.listen(DASHBOARD_PORT, () => {
+app.listen(DASHBOARD_PORT, '127.0.0.1', () => {
   console.log(`================================================================`);
   console.log(`👨‍💼 SHOPKEEPER DASHBOARD IS READY!`);
   console.log(`Open dashboard in your browser: http://localhost:${DASHBOARD_PORT}`);

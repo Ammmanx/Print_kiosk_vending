@@ -1,0 +1,30 @@
+name: InstaPrint CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-size: 20
+        cache: 'npm'
+
+    - name: Install All Dependencies
+      run: npm run install:all
+
+    - name: Build Codebase
+      run: npm run build
+
+    - name: Run Backend Tests
+      run: npm run test --prefix backend

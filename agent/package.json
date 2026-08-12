@@ -4,9 +4,23 @@
   "description": "Local Hardware Print Agent for Self-Service Print Kiosk",
   "main": "agent.js",
   "scripts": {
-    "start": "node agent.js"
+    "start": "node agent.js",
+    "build:exe": "pkg agent.js --targets node18-win-x64 --output dist/InstaPrint-Agent.exe --compress GZip"
+  },
+  "pkg": {
+    "assets": [
+      "dashboard.html"
+    ],
+    "scripts": [
+      "agent.js"
+    ],
+    "targets": [
+      "node18-win-x64"
+    ],
+    "outputPath": "dist"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.112.1",
     "axios": "^1.6.8",
     "cors": "^2.8.6",
     "dotenv": "^16.4.5",
@@ -16,5 +30,8 @@
     "pdf-to-printer": "^5.6.0",
     "print-vending-kiosk": "file:..",
     "qrcode": "^1.5.4"
+  },
+  "devDependencies": {
+    "pkg": "^5.8.1"
   }
 }
