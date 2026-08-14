@@ -116,7 +116,7 @@ const isLocalNetwork = window.location.hostname === 'localhost' ||
                        window.location.hostname.startsWith('192.168.') || 
                        window.location.hostname.startsWith('10.') || 
                        window.location.hostname.startsWith('172.');
-const API_BASE_URL = 'https://action-uniprotkb-ecommerce-mechanism.trycloudflare.com';
+const API_BASE_URL = 'https://former-coal-presenting-why.trycloudflare.com';
 
 // Step nodes for progress bar
 const stepNode1 = document.getElementById('step-node-1');

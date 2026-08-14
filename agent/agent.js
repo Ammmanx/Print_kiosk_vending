@@ -717,6 +717,7 @@ async function printJobDirect(jobId, job) {
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '60mb' }));
+app.use(express.static(__dirname));
 
 // POST: Forward login to backend; update local Shop ID context on success
 app.post('/api/login', async (req, res) => {
@@ -804,6 +805,32 @@ app.post('/api/register', async (req, res) => {
     res.json(registerResp.data);
   } catch (err) {
     console.error('Agent register error:', err.message);
+    const status = err.response?.status || 500;
+    const errMsg = err.response?.data?.error || err.message;
+    res.status(status).json({ error: errMsg });
+  }
+});
+
+// POST: Proxy change-password / forgot password reset to backend
+app.post('/api/v1/auth/change-password', async (req, res) => {
+  try {
+    const response = await axios.post(`${BACKEND_API_URL}/api/v1/auth/change-password`, req.body, {
+      headers: req.headers.authorization ? { 'Authorization': req.headers.authorization } : {}
+    });
+    res.json(response.data);
+  } catch (err) {
+    const status = err.response?.status || 500;
+    const errMsg = err.response?.data?.error || err.message;
+    res.status(status).json({ error: errMsg });
+  }
+});
+
+// POST: Proxy OTP verification to backend
+app.post('/api/v1/auth/otp/verify', async (req, res) => {
+  try {
+    const response = await axios.post(`${BACKEND_API_URL}/api/v1/auth/otp/verify`, req.body);
+    res.json(response.data);
+  } catch (err) {
     const status = err.response?.status || 500;
     const errMsg = err.response?.data?.error || err.message;
     res.status(status).json({ error: errMsg });
@@ -1045,9 +1072,15 @@ app.get('/api/config', async (_req, res) => {
     // Fallback quietly if connection isn't established yet
   }
   let qrCode = '';
+  let shopName = '';
+  let email = '';
+  let storefrontUrl = '';
   try {
     const profileResp = await axios.get(`${BACKEND_API_URL}/api/v1/profile/${SHOP_ID}`);
     qrCode = profileResp.data.qrCode || '';
+    shopName = profileResp.data.shopName || '';
+    email = profileResp.data.email || '';
+    storefrontUrl = profileResp.data.storefrontUrl || '';
   } catch (err) {
     // Fallback quietly if connection isn't established yet or backend offline
   }
@@ -1059,6 +1092,9 @@ app.get('/api/config', async (_req, res) => {
 
   res.json({
     shopId: SHOP_ID,
+    shopName,
+    email,
+    storefrontUrl,
     bwPrinter: localConfig.bwPrinter,
     colorPrinter: localConfig.colorPrinter,
     bwPrice,
@@ -1073,9 +1109,9 @@ app.get('/api/config', async (_req, res) => {
     activeBwJob,
     activeColorJob,
     qrCode,
-    frontendUrl: process.env.PUBLIC_FRONTEND_URL 
+    frontendUrl: storefrontUrl || (process.env.PUBLIC_FRONTEND_URL 
       ? `${process.env.PUBLIC_FRONTEND_URL}/?shop=${SHOP_ID}`
-      : `http://${localIp}:8080/?shop=${SHOP_ID}`
+      : `http://${localIp}:8080/?shop=${SHOP_ID}`)
   });
 });
 
@@ -1131,6 +1167,16 @@ app.get('/api/analytics', async (req, res) => {
       });
     }
 
+    const { from, to } = req.query;
+    if (from) {
+      const fromTime = new Date(from).getTime();
+      completedJobs = completedJobs.filter(j => j.createdAt >= fromTime);
+    }
+    if (to) {
+      const toTime = new Date(to + 'T23:59:59.999Z').getTime();
+      completedJobs = completedJobs.filter(j => j.createdAt <= toTime);
+    }
+
     let totalRevenue = 0;
     let totalSheets = 0;
     let bwCount = 0;
@@ -1153,6 +1199,13 @@ app.get('/api/analytics', async (req, res) => {
 
     const avgSheets = completedJobs.length > 0 ? (totalSheets / completedJobs.length).toFixed(1) : 0;
 
+    const transactions = completedJobs.map(job => ({
+      date: new Date(job.createdAt).toLocaleDateString() + ' ' + new Date(job.createdAt).toLocaleTimeString(),
+      printType: job.printType,
+      pages: job.totalPages * job.copies,
+      cost: job.cost
+    }));
+
     res.json({
       revenue: totalRevenue,
       orders: completedJobs.length,
@@ -1162,7 +1215,8 @@ app.get('/api/analytics', async (req, res) => {
         color: colorCount
       },
       paperSizes: paperSizeCounts,
-      hourlyDistribution: hourlyDistribution
+      hourlyDistribution: hourlyDistribution,
+      transactions: transactions
     });
   } catch (err) {
     console.error('Agent: Failed to generate analytics data:', err.message);

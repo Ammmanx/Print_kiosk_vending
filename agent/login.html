@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>InstaPrint Manager — Log In</title>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/auth.css">
+</head>
+<body>
+
+  <div id="auth-card">
+    <!-- Left side Banner -->
+    <div id="auth-banner">
+      <div>
+        <div id="auth-banner-logo">Insta<span>Print</span></div>
+        <p style="font-size: 0.85rem; color: rgba(255,255,255,0.7); margin-top: 4px;">Merchant Dashboard Console</p>
+      </div>
+      
+      <div style="margin: 40px 0;">
+        <h2 style="font-size: 1.4rem; font-weight: 700; margin-bottom: 20px; line-height: 1.3;">Powering your local print business</h2>
+        
+        <div class="feature-item">
+          <span class="feature-icon">✓</span>
+          <span>Fully automated online payment gateways</span>
+        </div>
+        <div class="feature-item">
+          <span class="feature-icon">✓</span>
+          <span>Real-time print job status monitors</span>
+        </div>
+        <div class="feature-item">
+          <span class="feature-icon">✓</span>
+          <span>Hardware configuration and limits control</span>
+        </div>
+      </div>
+
+      <div style="font-size: 0.72rem; color: rgba(255,255,255,0.5);">
+        © 2026 InstaPrint Systems. All rights reserved.
+      </div>
+    </div>
+
+    <!-- Right side forms -->
+    <div id="auth-form-container">
+      <!-- Standard Login form block -->
+      <div id="auth-form-block">
+        <div class="auth-tabs">
+          <a class="auth-tab active" href="login.html">Log In</a>
+          <a class="auth-tab" href="register.html">Register</a>
+          <div class="auth-tab-slider" style="transform: translateX(0);"></div>
+        </div>
+
+        <form id="form-login-new" data-action="login" style="display: flex; flex-direction: column; gap: 4px;">
+          <!-- Shop ID (Only for Log In) -->
+          <div class="auth-input-group" id="group-shop-id">
+            <label class="auth-label">Shop ID</label>
+            <div class="auth-input-wrapper">
+              <input type="text" id="input-shop-id" class="auth-input" required placeholder="e.g. aman_shop">
+              <span class="auth-input-icon" id="validation-shop-id"></span>
+            </div>
+          </div>
+
+          <!-- Password -->
+          <div class="auth-input-group">
+            <label class="auth-label">Password</label>
+            <div class="auth-input-wrapper">
+              <input type="password" id="input-password" class="auth-input" required placeholder="Enter password">
+              <button type="button" class="password-toggle-btn" id="btn-toggle-password" tabindex="-1" style="font-size:0.7rem;font-weight:700;color:#475569;letter-spacing:0;">Show</button>
+            </div>
+          </div>
+
+          <!-- Reset password request (Only for Log In) -->
+          <div style="text-align: right; margin-bottom: 18px; margin-top: -4px;" id="forgot-password-container">
+            <a href="#" id="btn-forgot-password" style="color: #3d5e35; font-size: 0.8rem; font-weight: 600; text-decoration: none;">Forgot password?</a>
+          </div>
+
+          <!-- Error message area -->
+          <div id="auth-error-message" style="color: #dc2626; font-size: 0.78rem; font-weight: 600; margin-bottom: 14px; display: none;"></div>
+
+          <!-- Submit Button -->
+          <button type="submit" id="btn-auth-submit" class="auth-btn">
+            <span id="btn-auth-text">Unlock Console</span>
+            <div class="spinner" id="btn-auth-spinner"></div>
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Forgot Password Request Modal Overlay -->
+  <div id="forgot-password-overlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px); z-index: 9995; display: none; align-items: center; justify-content: center; padding: 16px; box-sizing: border-box;">
+    <div class="forgot-password-modal">
+      <button id="btn-close-forgot" style="position: absolute; top: 16px; right: 16px; background: none; border: none; font-size: 1.1rem; color: #94a3b8; cursor: pointer; transition: color 0.2s; outline: none;">&#x2715;</button>
+      <h3 style="font-size: 1.2rem; font-weight: 800; color: #0f172a; margin-bottom: 8px;">🔑 Forgot Password Reset</h3>
+      <p style="font-size: 0.78rem; color: #64748b; margin-bottom: 16px;">Request a password change link. A verification code will be simulated for local development.</p>
+      
+      <form id="form-forgot-password" style="display: flex; flex-direction: column; gap: 12px;">
+        <div class="form-group" style="margin-bottom: 0;">
+          <label for="forgot-shop-id" style="font-size: 0.75rem; font-weight: 700; color: #475569;">Shop ID</label>
+          <input type="text" id="forgot-shop-id" required style="padding: 10px; border: 1.5px solid #cbd5e1; border-radius: 8px; font-family: inherit; font-size: 0.9rem;">
+        </div>
+        <div class="form-group" style="margin-bottom: 0;">
+          <label for="forgot-email" style="font-size: 0.75rem; font-weight: 700; color: #475569;">Gmail / Registered Email</label>
+          <input type="email" id="forgot-email" required style="padding: 10px; border: 1.5px solid #cbd5e1; border-radius: 8px; font-family: inherit; font-size: 0.9rem;">
+        </div>
+        <div class="form-group" style="margin-bottom: 0;">
+          <label for="forgot-new-password" style="font-size: 0.75rem; font-weight: 700; color: #475569;">New Password</label>
+          <input type="password" id="forgot-new-password" required style="padding: 10px; border: 1.5px solid #cbd5e1; border-radius: 8px; font-family: inherit; font-size: 0.9rem;">
+        </div>
+        <button type="submit" class="btn" style="margin-top: 10px;">Request Password Reset</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- OTP verification for password change -->
+  <div id="otp-change-overlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px); z-index: 9996; display: none; align-items: center; justify-content: center; padding: 16px; box-sizing: border-box;">
+    <div class="forgot-password-modal" style="max-width: 360px;">
+      <h3 style="font-size: 1.25rem; font-weight: 800; color: #0f172a; margin-bottom: 6px;">🔐 Enter Reset OTP Code</h3>
+      <p style="font-size: 0.78rem; color: #64748b; margin-bottom: 18px;">Please verify your ownership to finalize the password reset.</p>
+      
+      <form id="form-otp-change" style="display: flex; flex-direction: column; gap: 14px;">
+        <input type="hidden" id="otp-change-email">
+        <input type="hidden" id="otp-change-shopid">
+        <div class="form-group" style="margin-bottom: 0;">
+          <label style="font-size: 0.75rem; font-weight: 700; color: #475569;">6-Digit OTP Code</label>
+          <input type="text" id="input-otp-change-code" required placeholder="e.g. 123456" style="padding: 10px; border: 1.5px solid #cbd5e1; border-radius: 8px; font-family: inherit; font-size: 0.9rem; text-align: center; letter-spacing: 4px; font-weight: 700;">
+        </div>
+        <button type="submit" class="btn">Verify & Reset Password</button>
+      </form>
+    </div>
+  </div>
+
+  <script src="js/auth.js"></script>
+</body>
+</html>
